@@ -1,0 +1,38 @@
+{
+  "name": "@corehealth/scribe-sdk",
+  "version": "1.0.0",
+  "description": "Corehealth by CorestreamNG — AI Scribe Embeddable SDK — Multi-Standard (openEHR & FHIR R4) Clinical Dictation SDK",
+  "main": "dist/corehealth-scribe-sdk.umd.js",
+  "module": "dist/corehealth-scribe-sdk.esm.js",
+  "browser": "dist/corehealth-scribe-sdk.umd.js",
+  "types": "src/types.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "postman",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test tests/*.test.js",
+    "lint": "node --check src/index.js src/CoreHealthScribe.js src/IFrameBridge.js src/CoreHealthScribeElement.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git"
+  },
+  "keywords": [
+    "corehealth",
+    "emr",
+    "ehr",
+    "ai-scribe",
+    "openehr",
+    "fhir",
+    "healthcare",
+    "soap-notes"
+  ],
+  "author": "Corehealth by CorestreamNG <hello@corestream.ng>",
+  "license": "Apache-2.0"
+}

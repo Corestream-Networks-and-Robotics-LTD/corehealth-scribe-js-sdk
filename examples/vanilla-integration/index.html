@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoreHealth AI Scribe — Reference Vanilla JS Integration</title>
+  <!-- Load UMD build of the SDK -->
+  <script src="/dist/corehealth-scribe-sdk.umd.js"></script>
+  <style>
+    :root {
+      --primary: #011b33;
+      --secondary: #007bff;
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --radius: 8px;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+    }
+    .container {
+      max-width: 1040px;
+      margin: 0 auto;
+    }
+    header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .patient-pill {
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+    .dot.active { background: #22c55e; }
+    .dot.recording { background: #ef4444; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.3; } }
+    #scribe-mount {
+      min-height: 440px;
+    }
+    pre {
+      background: #0f172a;
+      color: #38bdf8;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      overflow-x: auto;
+      max-height: 380px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h2 style="margin: 0; font-size: 18px; color: var(--primary);">Partner EMR Simulation</h2>
+        <span style="font-size: 13px; color: var(--text-muted);">Consultation & Clinical Dictation Interface</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span class="patient-pill">Patient: Oladipo Amina (#492)</span>
+        <span style="font-size: 13px; color: var(--text-muted);">Encounter #1017</span>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="tabs">
+        <button id="tab-webcomponent" class="tab-btn active" onclick="switchTrack('web-component')">Track A: Web Component (Shadow DOM)</button>
+        <button id="tab-iframe" class="tab-btn" onclick="switchTrack('iframe')">Track B: Sandboxed iFrame (postMessage)</button>
+      </div>
+
+      <div class="status-bar">
+        <span id="status-dot" class="dot active"></span>
+        <strong id="status-label">SDK Initializing...</strong>
+        <span id="token-info" style="margin-left: auto; color: var(--text-muted); font-size: 12px;">Acquiring token from proxy...</span>
+      </div>
+
+      <!-- Mount point for CoreHealth AI Scribe UI -->
+      <div id="scribe-mount"></div>
+    </div>
+
+    <div id="results-card" class="card" style="display: none;">
+      <h3 style="margin-top: 0; font-size: 16px; color: var(--primary);">
+        ✓ Signed Clinical Data Received by Partner Backend (openEHR & FHIR R4)
+      </h3>
+      <p style="font-size: 13px; color: var(--text-muted);">
+        The AI Scribe SDK automatically generated and returned this standards-compliant payload:
+      </p>
+      <pre id="json-viewer"></pre>
+    </div>
+  </div>
+
+  <script>
+    let activeTrack = 'web-component';
+    let currentScribe = null;
+    let currentToken = null;
+
+    async function init() {
+      const statusLabel = document.getElementById('status-label');
+      const tokenInfo = document.getElementById('token-info');
+
+      try {
+        // Step 1: Call partner backend proxy to mint short-lived session token
+        statusLabel.textContent = 'Requesting SDK session token from backend proxy...';
+        const res = await fetch('/ch-scribe-token?patient_id=492&encounter_id=1017');
+        const data = await res.json();
+        currentToken = data.sdk_token;
+
+        tokenInfo.textContent = `Token: ${currentToken.substring(0, 16)}... (Expires in ${data.expires_in}s)`;
+        statusLabel.textContent = 'Token minted successfully. Mounting AI Scribe Studio...';
+
+        mountScribe(activeTrack);
+      } catch (err) {
+        statusLabel.textContent = `Error: ${err.message}`;
+        console.error('Initialization error:', err);
+      }
+    }
+
+    async function mountScribe(track) {
+      if (currentScribe) {
+        currentScribe.unmount();
+        currentScribe = null;
+      }
+
+      const statusDot = document.getElementById('status-dot');
+      const statusLabel = document.getElementById('status-label');
+
+      // Use the global CoreHealth SDK library
+      const { CoreHealthScribe } = window.CoreHealth;
+
+      currentScribe = new CoreHealthScribe({
+        baseUrl: window.location.origin, // Proxied or host
+        sdkToken: currentToken,
+        track: track,
+        mountTarget: '#scribe-mount',
+        patientId: 492,
+        encounterId: 1017,
+        locale: 'en-NG',
+        theme: 'light',
+
+        onReady: (ctx) => {
+          statusLabel.textContent = `AI Scribe Studio Ready (${track === 'iframe' ? 'iFrame' : 'Web Component'})`;
+          statusDot.className = 'dot active';
+        },
+
+        onStateChange: (state) => {
+          if (state === 'recording') {
+            statusLabel.textContent = 'Dictation in progress...';
+            statusDot.className = 'dot recording';
+          } else if (state === 'processing') {
+            statusLabel.textContent = 'AI Structuring note into SOAP format...';
+            statusDot.className = 'dot';
+          } else if (state === 'reviewing') {
+            statusLabel.textContent = 'Reviewing structured note & orders';
+            statusDot.className = 'dot active';
+          } else if (state === 'signed-off') {
+            statusLabel.textContent = '✓ Note accepted & signed';
+            statusDot.className = 'dot active';
+          }
+        },
+
+        onSignedOff: async (payload) => {
+          statusLabel.textContent = 'Saving signed note to EHR backend...';
+
+          // Step 2: Partner EMR forwards payload to its own backend proxy
+          const saveRes = await fetch('/encounters/1017/scribe-signoff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const savedData = await saveRes.json();
+
+          statusLabel.textContent = '✓ Successfully saved to EHR. openEHR & FHIR Compositions received!';
+          showResults(savedData);
+        },
+
+        onError: (err) => {
+          statusLabel.textContent = `Scribe Error: ${err.message}`;
+          console.error('Scribe Error:', err);
+        }
+      });
+
+      await currentScribe.mount();
+    }
+
+    function switchTrack(track) {
+      if (activeTrack === track) return;
+      activeTrack = track;
+
+      document.getElementById('tab-webcomponent').classList.toggle('active', track === 'web-component');
+      document.getElementById('tab-iframe').classList.toggle('active', track === 'iframe');
+
+      mountScribe(track);
+    }
+
+    function showResults(data) {
+      const resultsCard = document.getElementById('results-card');
+      const jsonViewer = document.getElementById('json-viewer');
+      resultsCard.style.display = 'block';
+      jsonViewer.textContent = JSON.stringify(data, null, 2);
+      resultsCard.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Start on page load
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
