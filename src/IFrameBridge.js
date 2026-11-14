@@ -44,9 +44,9 @@ export class IFrameBridge {
     iframe.src = `${baseUrl}/scribe?${params.toString()}`;
     iframe.setAttribute('allow', 'microphone');
     iframe.setAttribute('title', 'CoreHealth AI Scribe Studio');
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-microphone');
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
     iframe.style.width = '100%';
-    iframe.style.height = '620px';
+    iframe.style.height = '780px';
     iframe.style.border = 'none';
     iframe.style.borderRadius = '8px';
     iframe.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)';

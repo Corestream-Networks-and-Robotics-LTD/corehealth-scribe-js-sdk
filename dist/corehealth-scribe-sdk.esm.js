@@ -48,9 +48,9 @@ class IFrameBridge {
     iframe.src = `${baseUrl}/scribe?${params.toString()}`;
     iframe.setAttribute('allow', 'microphone');
     iframe.setAttribute('title', 'CoreHealth AI Scribe Studio');
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-microphone');
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
     iframe.style.width = '100%';
-    iframe.style.height = '620px';
+    iframe.style.height = '780px';
     iframe.style.border = 'none';
     iframe.style.borderRadius = '8px';
     iframe.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)';
@@ -144,16 +144,31 @@ class IFrameBridge {
 /**
  * CoreHealth AI Scribe — Shadow DOM Web Component (<corehealth-scribe-studio>)
  * Complete standalone custom element with shadow DOM style isolation,
- * dynamic clinical taxonomies, super-compressed catalog grounding,
- * suggested orders deck, draft persistence, and 60 FPS audio visualizer.
+ * progressive clinical workflow (Dictate/Load Sample -> Process -> Review & Sign),
+ * crisp inline SVG icons, dynamic clinical taxonomies, super-compressed catalog grounding,
+ * interactive suggested orders deck with clean vanilla modal, draft persistence,
+ * and 60 FPS live waveform visualizer with dictation timer.
  */
+
+const ICONS = {
+  mic: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>`,
+  stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
+  sparkle: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  sample: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  copy: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`,
+  trash: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
+  plus: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+  check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  sign: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>`,
+  close: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+};
 
 class CoreHealthScribeElement extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
 
-    // State (Store role as internal property to prevent ARIA attribute reflection in constructor)
+    // Internal State
     this._clinicalRole = 'doctor';
     this.taxonomy = 'soap';
     this.isRecording = false;
@@ -170,7 +185,7 @@ class CoreHealthScribeElement extends HTMLElement {
     this.activeFilter = 'all';
     this.customCatalog = null;
     this.debounceTimer = null;
-    this.showCatalogModal = false;
+    this.currentStep = 1; // 1: Dictate, 2: Processed / Reviewing, 3: Signed
   }
 
   get role() {
@@ -231,6 +246,7 @@ class CoreHealthScribeElement extends HTMLElement {
       <style>
         :host {
           display: block;
+          position: relative;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           color: #1e293b;
           background: #ffffff;
@@ -249,13 +265,13 @@ class CoreHealthScribeElement extends HTMLElement {
           justify-content: space-between;
           align-items: center;
           gap: 12px;
-          padding: 12px 18px;
+          padding: 10px 18px;
           background: #f8fafc;
           border-bottom: 1px solid #e2e8f0;
         }
         .ch-brand {
           font-weight: 700;
-          font-size: 14px;
+          font-size: 13px;
           display: flex;
           align-items: center;
           gap: 8px;
@@ -266,13 +282,66 @@ class CoreHealthScribeElement extends HTMLElement {
           color: #0369a1;
           font-size: 11px;
           font-weight: 600;
-          padding: 3px 8px;
+          padding: 2px 8px;
           border-radius: 12px;
         }
+
+        /* Flow Stepper Nav */
+        .ch-flow-nav {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 8px 18px;
+          background: #f1f5f9;
+          border-bottom: 1px solid #e2e8f0;
+          font-size: 12px;
+        }
+        .ch-step-node {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: #64748b;
+          font-weight: 500;
+          transition: all 0.2s ease;
+        }
+        .ch-step-node.active {
+          color: #011b33;
+          font-weight: 700;
+        }
+        .ch-step-node.completed {
+          color: #16a34a;
+          font-weight: 600;
+        }
+        .ch-step-bubble {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 700;
+          background: #cbd5e1;
+          color: #475569;
+        }
+        .ch-step-node.active .ch-step-bubble {
+          background: #011b33;
+          color: #ffffff;
+        }
+        .ch-step-node.completed .ch-step-bubble {
+          background: #16a34a;
+          color: #ffffff;
+        }
+        .ch-step-arrow {
+          color: #94a3b8;
+          font-size: 12px;
+        }
+
         .ch-tax-switcher {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 3px;
           background: #edeef2;
           padding: 2px 4px;
           border-radius: 6px;
@@ -282,7 +351,7 @@ class CoreHealthScribeElement extends HTMLElement {
           background: none;
           font-size: 11px;
           font-weight: 600;
-          padding: 4px 10px;
+          padding: 3px 8px;
           border-radius: 4px;
           cursor: pointer;
           color: #475569;
@@ -295,8 +364,8 @@ class CoreHealthScribeElement extends HTMLElement {
         .ch-badge {
           display: inline-flex;
           align-items: center;
-          gap: 4px;
-          padding: 4px 8px;
+          gap: 5px;
+          padding: 3px 8px;
           font-size: 11px;
           font-weight: 600;
           border-radius: 4px;
@@ -306,20 +375,32 @@ class CoreHealthScribeElement extends HTMLElement {
         .ch-badge.recording {
           background: #dc2626;
           color: #ffffff;
-          animation: pulse 1.5s infinite;
         }
         .ch-badge.success {
           background: #16a34a;
           color: #ffffff;
         }
 
-        /* Brief / Allergy Alert Strip */
+        .ch-rec-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #ffffff;
+          display: inline-block;
+          animation: recPulse 1s infinite alternate;
+        }
+        @keyframes recPulse {
+          0% { opacity: 0.3; transform: scale(0.8); }
+          100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Brief / Alert Strip */
         .ch-alert-strip {
-          padding: 8px 18px;
+          padding: 6px 18px;
           background: #fef3c7;
           border-bottom: 1px solid #fde68a;
           color: #92400e;
-          font-size: 12px;
+          font-size: 11px;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -341,7 +422,7 @@ class CoreHealthScribeElement extends HTMLElement {
           grid-template-columns: 1fr 1fr;
           gap: 16px;
           padding: 16px;
-          min-height: 380px;
+          min-height: 360px;
         }
         @media (max-width: 860px) {
           .ch-body { grid-template-columns: 1fr; }
@@ -362,7 +443,7 @@ class CoreHealthScribeElement extends HTMLElement {
         }
         .ch-waveform {
           width: 100%;
-          height: 32px;
+          height: 30px;
           background: #0f172a;
           border-radius: 4px;
           display: none;
@@ -385,6 +466,22 @@ class CoreHealthScribeElement extends HTMLElement {
           box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
         }
 
+        /* Focused Empty State for Step 1 */
+        .ch-empty-guide {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          padding: 30px 20px;
+          border: 2px dashed #e2e8f0;
+          border-radius: 8px;
+          background: #f8fafc;
+          color: #64748b;
+          min-height: 240px;
+        }
+
         /* Suggested Orders Deck */
         .ch-orders-deck {
           border-top: 1px solid #e2e8f0;
@@ -401,6 +498,7 @@ class CoreHealthScribeElement extends HTMLElement {
           display: flex;
           flex-wrap: wrap;
           gap: 6px;
+          align-items: center;
         }
         .ch-chip {
           border: 1px solid #cbd5e1;
@@ -411,6 +509,7 @@ class CoreHealthScribeElement extends HTMLElement {
           border-radius: 14px;
           cursor: pointer;
           color: #475569;
+          transition: all 0.15s ease;
         }
         .ch-chip.active {
           background: #011b33;
@@ -462,6 +561,27 @@ class CoreHealthScribeElement extends HTMLElement {
           border-radius: 4px;
           font-size: 12px;
         }
+        .ch-inline-input:focus {
+          outline: none;
+          border-color: #0284c7;
+        }
+
+        .ch-btn-icon-del {
+          background: none;
+          border: none;
+          color: #94a3b8;
+          padding: 4px 6px;
+          border-radius: 4px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s ease;
+        }
+        .ch-btn-icon-del:hover {
+          color: #dc2626;
+          background: #fee2e2;
+        }
 
         /* Footer */
         .ch-footer {
@@ -478,7 +598,7 @@ class CoreHealthScribeElement extends HTMLElement {
           gap: 6px;
           font-size: 13px;
           font-weight: 600;
-          padding: 8px 16px;
+          padding: 7px 14px;
           border-radius: 6px;
           cursor: pointer;
           border: none;
@@ -492,6 +612,14 @@ class CoreHealthScribeElement extends HTMLElement {
           background: #dc2626;
           animation: pulse 1.5s infinite;
         }
+        .ch-btn-process {
+          background: #0284c7;
+          color: #ffffff;
+        }
+        .ch-btn-process.ready {
+          background: #0369a1;
+          box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.3);
+        }
         .ch-btn-sign {
           background: #16a34a;
           color: #ffffff;
@@ -504,8 +632,11 @@ class CoreHealthScribeElement extends HTMLElement {
           background: #ffffff;
           border: 1px solid #cbd5e1;
           color: #475569;
-          font-size: 11px;
-          padding: 4px 10px;
+          font-size: 12px;
+          padding: 6px 12px;
+        }
+        .ch-btn-secondary:hover {
+          background: #f1f5f9;
         }
 
         @keyframes pulse {
@@ -513,23 +644,98 @@ class CoreHealthScribeElement extends HTMLElement {
           70% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
           100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
         }
+
+        /* Vanilla Modal Styles */
+        .ch-modal-backdrop {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(15, 23, 42, 0.55);
+          backdrop-filter: blur(2px);
+          display: none;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 16px;
+        }
+        .ch-modal-card {
+          background: #ffffff;
+          border-radius: 8px;
+          border: 1px solid #cbd5e1;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.1);
+          width: 100%;
+          max-width: 480px;
+          overflow: hidden;
+          animation: modalFadeIn 0.18s ease-out;
+        }
+        @keyframes modalFadeIn {
+          from { opacity: 0; transform: scale(0.96); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .ch-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px 16px;
+          background: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
+          font-size: 13px;
+          color: #011b33;
+        }
+        .ch-modal-body {
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .ch-modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          padding: 12px 16px;
+          background: #f8fafc;
+          border-top: 1px solid #e2e8f0;
+        }
+        .ch-form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .ch-form-group label {
+          font-size: 11px;
+          font-weight: 600;
+          color: #475569;
+          text-transform: uppercase;
+        }
+        .ch-form-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .ch-btn-icon {
+          background: none;
+          border: none;
+          color: #64748b;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          display: inline-flex;
+          align-items: center;
+        }
+        .ch-btn-icon:hover {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
       </style>
 
-      <!-- 1. Header -->
+      <!-- 1. Master Header -->
       <div class="ch-header">
         <div class="ch-brand">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="22"/>
-          </svg>
+          ${ICONS.mic}
           <span>CoreHealth AI Scribe</span>
           ${patientId ? `<span class="ch-meta-pill">Patient #${patientId} ${encounterId ? `· Enc #${encounterId}` : ''}</span>` : ''}
-        </div>
-
-        <!-- Taxonomy Switcher -->
-        <div class="ch-tax-switcher" id="tax-switcher">
-          <!-- Dynamically populated based on role -->
         </div>
 
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -543,11 +749,29 @@ class CoreHealthScribeElement extends HTMLElement {
             <option value="en-US">American English (en-US)</option>
             <option value="fr-FR">Français (fr-FR)</option>
           </select>
-          <span id="status-badge" class="ch-badge">Ready</span>
+          <span id="status-badge" class="ch-badge">${ICONS.check} Ready</span>
         </div>
       </div>
 
-      <!-- 2. Draft Notice -->
+      <!-- 2. Progressive Flow Stepper Navigation -->
+      <div class="ch-flow-nav">
+        <div class="ch-step-node active" id="st-node-1">
+          <span class="ch-step-bubble">1</span>
+          <span>Start Dictation or Load Sample</span>
+        </div>
+        <span class="ch-step-arrow">→</span>
+        <div class="ch-step-node" id="st-node-2">
+          <span class="ch-step-bubble">2</span>
+          <span>Process Note & Extract Orders</span>
+        </div>
+        <span class="ch-step-arrow">→</span>
+        <div class="ch-step-node" id="st-node-3">
+          <span class="ch-step-bubble">3</span>
+          <span>Review, Adjust & Sign</span>
+        </div>
+      </div>
+
+      <!-- 3. Draft Notice -->
       <div id="draft-notice" class="ch-draft-notice">
         <span><i id="draft-time-label">Restored uncommitted consultation draft</i></span>
         <div>
@@ -555,7 +779,7 @@ class CoreHealthScribeElement extends HTMLElement {
         </div>
       </div>
 
-      <!-- 3. Brief / Allergy Alert Strip -->
+      <!-- 4. Brief / Allergy Alert Strip -->
       ${summary ? `
       <div class="ch-alert-strip">
         <div>
@@ -564,36 +788,63 @@ class CoreHealthScribeElement extends HTMLElement {
       </div>
       ` : ''}
 
-      <!-- 4. Cockpit Body -->
+      <!-- 5. Dual Cockpit Body -->
       <div class="ch-body">
-        <!-- Left: Audio Dictation -->
+        <!-- Left: Audio Dictation & Capture -->
         <div class="ch-pane">
           <div class="ch-pane-header">
             <span>1. Audio Dictation & Live Transcript</span>
             <div style="display: flex; gap: 6px; align-items: center;">
-              <button type="button" id="btn-sample" class="ch-btn ch-btn-secondary" title="Load sample consultation dictation">Load Sample</button>
-              <button type="button" id="btn-process" class="ch-btn" style="background: #0284c7; color: #ffffff; padding: 6px 12px; font-size: 12px;">Process Note</button>
-              <button type="button" id="btn-record" class="ch-btn ch-btn-record">Start Dictation</button>
+              <button type="button" id="btn-record" class="ch-btn ch-btn-record">
+                ${ICONS.mic} <span id="record-btn-text">Start Dictation</span>
+              </button>
+              <button type="button" id="btn-sample" class="ch-btn ch-btn-secondary" title="Load sample consultation dictation">
+                ${ICONS.sample} <span>Load Sample</span>
+              </button>
+              <button type="button" id="btn-process" class="ch-btn ch-btn-process" title="Structure transcript into note & extract orders">
+                ${ICONS.sparkle} <span id="process-btn-text">Process Note</span>
+              </button>
             </div>
           </div>
           <canvas id="waveform-canvas" class="ch-waveform"></canvas>
-          <textarea id="transcript-input" class="ch-textarea" placeholder="Dictate your clinical findings, history, examination, or prescriptions..."></textarea>
+          <textarea id="transcript-input" class="ch-textarea" placeholder="Click 'Start Dictation' to dictate clinical history, findings, and prescriptions, or click 'Load Sample' to begin..."></textarea>
         </div>
 
-        <!-- Right: Structured Consultation Note -->
+        <!-- Right: Structured Consultation Note (Revealed upon processing) -->
         <div class="ch-pane">
           <div class="ch-pane-header">
             <span id="note-pane-title">2. Structured Note (${this.taxonomy.toUpperCase()})</span>
             <div style="display: flex; gap: 6px; align-items: center;">
-              <button type="button" id="btn-copy-note" class="ch-btn ch-btn-secondary" style="font-size: 11px; padding: 4px 8px;">Copy Note</button>
-              <button type="button" id="btn-clear-all" class="ch-btn ch-btn-secondary" style="font-size: 11px; padding: 4px 8px; color: #dc2626;">Clear</button>
+              <!-- Taxonomy Switcher -->
+              <div class="ch-tax-switcher" id="tax-switcher" style="display: none;"></div>
+              <button type="button" id="btn-copy-note" class="ch-btn ch-btn-secondary" style="font-size: 11px; padding: 4px 8px; display: none;">
+                ${ICONS.copy} <span>Copy Note</span>
+              </button>
+              <button type="button" id="btn-clear-all" class="ch-btn ch-btn-secondary" style="font-size: 11px; padding: 4px 8px; color: #dc2626;">
+                ${ICONS.trash} <span>Clear</span>
+              </button>
             </div>
           </div>
-          <textarea id="note-input" class="ch-textarea" placeholder="AI structured note will appear here in selected taxonomy format..."></textarea>
+
+          <!-- Empty Guide before processing -->
+          <div id="note-empty-guide" class="ch-empty-guide">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" style="margin-bottom: 8px;">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+            <strong style="color: #334155; font-size: 13px;">Step 1: Dictate or Load Sample</strong>
+            <p style="font-size: 12px; color: #64748b; margin: 4px 0 0; max-width: 280px; line-height: 1.4;">
+              Speak into your microphone or click <strong>Load Sample</strong>, then click <strong>Process Note</strong> to structure clinical findings and ground orders.
+            </p>
+          </div>
+
+          <!-- Structured note textarea (visible once note is populated) -->
+          <textarea id="note-input" class="ch-textarea" style="display: none;" placeholder="AI structured note will appear here in selected taxonomy format..."></textarea>
         </div>
       </div>
 
-      <!-- 5. Suggested Orders & Prescriptions Deck -->
+      <!-- 6. Suggested Orders & Prescriptions Deck (Step 2 & 3) -->
       <div id="orders-deck" class="ch-orders-deck" style="display: none;">
         <div class="ch-deck-header">
           <div>
@@ -606,7 +857,9 @@ class CoreHealthScribeElement extends HTMLElement {
             <button type="button" class="ch-chip" data-filter="lab">Laboratory</button>
             <button type="button" class="ch-chip" data-filter="rad">Imaging</button>
             <button type="button" class="ch-chip" data-filter="proc">Procedures</button>
-            <button type="button" id="btn-add-order" class="ch-btn-secondary">+ Add Order</button>
+            <button type="button" id="btn-add-order" class="ch-btn-secondary" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600;">
+              ${ICONS.plus} <span>Add Order</span>
+            </button>
           </div>
         </div>
 
@@ -619,7 +872,7 @@ class CoreHealthScribeElement extends HTMLElement {
               <th>Dosage / Indication</th>
               <th>Instructions</th>
               <th style="width: 80px;">Tariff</th>
-              <th style="width: 40px;"></th>
+              <th style="width: 40px; text-align: center;"></th>
             </tr>
           </thead>
           <tbody id="orders-tbody">
@@ -633,12 +886,59 @@ class CoreHealthScribeElement extends HTMLElement {
         </div>
       </div>
 
-      <!-- 6. Footer -->
+      <!-- 7. Footer -->
       <div class="ch-footer">
         <span style="font-size: 11px; color: #64748b;">openEHR & FHIR R4 Compliant · NDPA 2023 Statutory Privacy</span>
         <button type="button" id="btn-sign" class="ch-btn ch-btn-sign" disabled>
-          Accept & Sign Note & Orders
+          ${ICONS.sign} <span>Accept & Sign Note & Orders</span>
         </button>
+      </div>
+
+      <!-- 8. Vanilla Modal: Add Clinical Order -->
+      <div id="modal-add-order" class="ch-modal-backdrop">
+        <div class="ch-modal-card">
+          <div class="ch-modal-header">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${ICONS.plus}
+              <strong>Stage Clinical Order</strong>
+            </div>
+            <button type="button" id="btn-close-modal" class="ch-btn-icon" title="Close">${ICONS.close}</button>
+          </div>
+          <div class="ch-modal-body">
+            <div class="ch-form-group">
+              <label>Order Category</label>
+              <select id="mo-cat" class="ch-inline-input">
+                <option value="medication">Prescription / Medication (Rx)</option>
+                <option value="lab">Laboratory Investigation</option>
+                <option value="imaging">Radiology / Imaging</option>
+                <option value="procedure">Clinical Procedure</option>
+                <option value="nursing">Nursing Intervention</option>
+              </select>
+            </div>
+            <div class="ch-form-group">
+              <label>Item Name *</label>
+              <input type="text" id="mo-name" class="ch-inline-input" placeholder="e.g. Paracetamol 500mg Tablet, Full Blood Count, Chest X-Ray">
+            </div>
+            <div class="ch-form-row">
+              <div class="ch-form-group">
+                <label>Dosage / Indication</label>
+                <input type="text" id="mo-spec" class="ch-inline-input" placeholder="e.g. 500mg TDS, Confirm malaria">
+              </div>
+              <div class="ch-form-group">
+                <label>Instructions / Route</label>
+                <input type="text" id="mo-inst" class="ch-inline-input" placeholder="e.g. Oral after meals, Fasting EDTA">
+              </div>
+            </div>
+            <div class="ch-form-group">
+              <label>Tariff / Estimated Cost (₦)</label>
+              <input type="number" id="mo-tariff" class="ch-inline-input" value="1000" min="0">
+            </div>
+          </div>
+          <div class="ch-modal-footer">
+            <button type="button" id="btn-cancel-modal" class="ch-btn ch-btn-secondary">${ICONS.close} Cancel</button>
+            <button type="button" id="btn-confirm-add-order" class="ch-btn" style="background: #011b33; color: #fff;">${ICONS.plus} Add to Staged Deck</button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -686,6 +986,23 @@ class CoreHealthScribeElement extends HTMLElement {
     });
   }
 
+  setFlowStep(step) {
+    this.currentStep = step;
+    const n1 = this.shadowRoot.getElementById('st-node-1');
+    const n2 = this.shadowRoot.getElementById('st-node-2');
+    const n3 = this.shadowRoot.getElementById('st-node-3');
+
+    if (n1) {
+      n1.className = step >= 1 ? (step > 1 ? 'ch-step-node completed' : 'ch-step-node active') : 'ch-step-node';
+    }
+    if (n2) {
+      n2.className = step >= 2 ? (step > 2 ? 'ch-step-node completed' : 'ch-step-node active') : 'ch-step-node';
+    }
+    if (n3) {
+      n3.className = step >= 3 ? 'ch-step-node active' : 'ch-step-node';
+    }
+  }
+
   setupSpeech() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -706,6 +1023,7 @@ class CoreHealthScribeElement extends HTMLElement {
         const input = this.shadowRoot.getElementById('transcript-input');
         if (input) {
           input.value = this.transcript + (interim ? '(' + interim + ')' : '');
+          this.onTranscriptChanged(input.value);
         }
         this.saveDraft();
       };
@@ -713,6 +1031,21 @@ class CoreHealthScribeElement extends HTMLElement {
       this.recognition.onerror = (e) => {
         console.warn('Speech recognition warning', e);
       };
+    }
+  }
+
+  onTranscriptChanged(text) {
+    const processBtn = this.shadowRoot.getElementById('btn-process');
+    if (processBtn) {
+      if (text && text.trim().length > 10) {
+        processBtn.classList.add('ready');
+        this.setFlowStep(2);
+      } else {
+        processBtn.classList.remove('ready');
+        if (!this.structuredSections || this.structuredSections.length === 0) {
+          this.setFlowStep(1);
+        }
+      }
     }
   }
 
@@ -730,6 +1063,107 @@ class CoreHealthScribeElement extends HTMLElement {
     const noteInput = this.shadowRoot.getElementById('note-input');
     const selectAllCheckbox = this.shadowRoot.getElementById('ch-select-all-orders');
 
+    // Add Order Modal Controls
+    const modalAddOrder = this.shadowRoot.getElementById('modal-add-order');
+    const btnCloseModal = this.shadowRoot.getElementById('btn-close-modal');
+    const btnCancelModal = this.shadowRoot.getElementById('btn-cancel-modal');
+    const btnConfirmAddOrder = this.shadowRoot.getElementById('btn-confirm-add-order');
+    const moName = this.shadowRoot.getElementById('mo-name');
+    const moCat = this.shadowRoot.getElementById('mo-cat');
+    const moSpec = this.shadowRoot.getElementById('mo-spec');
+    const moInst = this.shadowRoot.getElementById('mo-inst');
+    const moTariff = this.shadowRoot.getElementById('mo-tariff');
+
+    const closeModal = () => {
+      if (modalAddOrder) modalAddOrder.style.display = 'none';
+    };
+
+    const openModal = () => {
+      if (modalAddOrder) {
+        modalAddOrder.style.display = 'flex';
+        if (moName) {
+          moName.value = '';
+          moName.focus();
+        }
+        if (moSpec) moSpec.value = '';
+        if (moInst) moInst.value = '';
+        if (moTariff) moTariff.value = '1000';
+      }
+    };
+
+    if (addOrderBtn) {
+      addOrderBtn.addEventListener('click', openModal);
+    }
+    if (btnCloseModal) {
+      btnCloseModal.addEventListener('click', closeModal);
+    }
+    if (btnCancelModal) {
+      btnCancelModal.addEventListener('click', closeModal);
+    }
+    if (modalAddOrder) {
+      modalAddOrder.addEventListener('click', (e) => {
+        if (e.target === modalAddOrder) closeModal();
+      });
+    }
+
+    const submitNewOrder = () => {
+      const name = moName ? moName.value.trim() : '';
+      if (!name) {
+        if (moName) {
+          moName.style.borderColor = '#dc2626';
+          moName.focus();
+        }
+        return;
+      }
+      if (moName) moName.style.borderColor = '#cbd5e1';
+
+      const cat = moCat ? moCat.value : 'medication';
+      const spec = moSpec ? moSpec.value.trim() : '';
+      const inst = moInst ? moInst.value.trim() : '';
+      const tariff = moTariff ? parseFloat(moTariff.value) || 0 : 0;
+
+      const isMed = cat === 'medication';
+      const newOrder = {
+        id: 'ord_' + (this.groundedOrders.length + 1),
+        order_type: isMed ? 'PRODUCT' : 'SERVICE',
+        service_type: isMed ? null : cat,
+        category_id: isMed ? 4 : 5,
+        category_name: isMed ? 'Prescription' : cat.toUpperCase(),
+        catalog_id: null,
+        item_name: name,
+        dosage: isMed ? (spec || '1 tab') : null,
+        indication: !isMed ? spec : null,
+        frequency: isMed ? 'OD' : null,
+        duration: isMed ? '3 days' : null,
+        route: isMed ? 'oral' : null,
+        quantity: 1,
+        instructions: inst || (isMed ? 'Take as directed by clinician' : 'Standard clinical protocol'),
+        unit_price: tariff,
+        target_queue: isMed ? 'dispensing_queue' : (cat === 'lab' ? 'laboratory_queue' : 'radiology_queue'),
+        is_selected: true,
+        selected: true,
+        is_matched: false,
+        is_free_form: true,
+        safety_warning: null
+      };
+
+      this.groundedOrders.push(newOrder);
+      this.renderOrdersTable();
+      this.saveDraft();
+      this.dispatchEvent(new CustomEvent('corehealth:orders-updated', { detail: this.groundedOrders }));
+      closeModal();
+    };
+
+    if (btnConfirmAddOrder) {
+      btnConfirmAddOrder.addEventListener('click', submitNewOrder);
+    }
+    if (moName) {
+      moName.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitNewOrder();
+        if (e.key === 'Escape') closeModal();
+      });
+    }
+
     if (recordBtn) {
       recordBtn.addEventListener('click', () => this.toggleRecording());
     }
@@ -738,7 +1172,7 @@ class CoreHealthScribeElement extends HTMLElement {
       processBtn.addEventListener('click', () => {
         const statusBadge = this.shadowRoot.getElementById('status-badge');
         if (statusBadge) {
-          statusBadge.innerText = 'Structuring note & orders...';
+          statusBadge.innerHTML = `${ICONS.sparkle} Structuring note & orders...`;
           statusBadge.className = 'ch-badge';
         }
         this.processDictation();
@@ -750,6 +1184,7 @@ class CoreHealthScribeElement extends HTMLElement {
         if (transcriptInput) {
           transcriptInput.value = 'Patient presents with a 3-day history of high-grade fever, chills, severe headache, and general body weakness. Physical examination reveals: Temperature 38.6°C, BP 124/82 mmHg, Pulse 88 bpm. Chest is clear on auscultation, abdomen is soft and non-tender. Assessment: Acute Uncomplicated Malaria. Prescribe Artemether-Lumefantrine 80/480mg twice daily for 3 days and Paracetamol 500mg TDS for 3 days. Request Urgent Malaria Parasite (MP) Giemsa microscopy and Full Blood Count (FBC). Advise adequate bed rest and oral fluid intake.';
           this.transcript = transcriptInput.value;
+          this.onTranscriptChanged(transcriptInput.value);
           this.saveDraft();
         }
       });
@@ -760,9 +1195,9 @@ class CoreHealthScribeElement extends HTMLElement {
         if (noteInput && noteInput.value) {
           try {
             await navigator.clipboard.writeText(noteInput.value);
-            const origText = copyNoteBtn.innerText;
-            copyNoteBtn.innerText = 'Copied!';
-            setTimeout(() => { copyNoteBtn.innerText = origText; }, 1500);
+            const origHtml = copyNoteBtn.innerHTML;
+            copyNoteBtn.innerHTML = `${ICONS.check} <span>Copied!</span>`;
+            setTimeout(() => { copyNoteBtn.innerHTML = origHtml; }, 1500);
           } catch (e) {
             console.warn('Clipboard write error', e);
           }
@@ -780,6 +1215,17 @@ class CoreHealthScribeElement extends HTMLElement {
           this.groundedOrders = [];
           this.renderOrdersTable();
           if (signBtn) signBtn.disabled = true;
+
+          // Reset focused flow state to Step 1
+          const guide = this.shadowRoot.getElementById('note-empty-guide');
+          const taxSwitcher = this.shadowRoot.getElementById('tax-switcher');
+          const copyBtn = this.shadowRoot.getElementById('btn-copy-note');
+          if (guide) guide.style.display = 'flex';
+          if (noteInput) noteInput.style.display = 'none';
+          if (taxSwitcher) taxSwitcher.style.display = 'none';
+          if (copyBtn) copyBtn.style.display = 'none';
+          this.setFlowStep(1);
+
           this.discardDraft();
         }
       });
@@ -788,8 +1234,11 @@ class CoreHealthScribeElement extends HTMLElement {
     if (selectAllCheckbox) {
       selectAllCheckbox.addEventListener('change', (e) => {
         const checked = e.target.checked;
-        this.groundedOrders.forEach(ord => { ord.selected = checked; });
-        this.shadowRoot.querySelectorAll('.ch-order-checkbox').forEach(cb => { cb.checked = checked; });
+        this.groundedOrders.forEach(ord => {
+          ord.selected = checked;
+          ord.is_selected = checked;
+        });
+        this.shadowRoot.querySelectorAll('.order-chk').forEach(cb => { cb.checked = checked; });
         this.updateTariffPreview();
         this.dispatchEvent(new CustomEvent('corehealth:orders-updated', { detail: this.groundedOrders }));
       });
@@ -807,16 +1256,15 @@ class CoreHealthScribeElement extends HTMLElement {
       });
     }
 
-    if (addOrderBtn) {
-      addOrderBtn.addEventListener('click', () => this.promptAddOrder());
-    }
-
     if (discardDraftBtn) {
       discardDraftBtn.addEventListener('click', () => this.discardDraft());
     }
 
     if (transcriptInput) {
-      transcriptInput.addEventListener('input', () => this.saveDraft());
+      transcriptInput.addEventListener('input', () => {
+        this.onTranscriptChanged(transcriptInput.value);
+        this.saveDraft();
+      });
     }
 
     if (noteInput) {
@@ -844,11 +1292,23 @@ class CoreHealthScribeElement extends HTMLElement {
 
     if (!this.isRecording) {
       this.isRecording = true;
+      this.secondsRecorded = 0;
       recordBtn.classList.add('recording');
-      recordBtn.innerText = 'Stop Dictation';
-      statusBadge.innerText = '● Recording';
+      recordBtn.innerHTML = `${ICONS.stop} <span>Stop Dictation (<span id="rec-btn-timer">00:00</span>)</span>`;
+      statusBadge.innerHTML = `<span class="ch-rec-dot"></span> <span>Recording (<span id="rec-badge-timer">00:00</span>)</span>`;
       statusBadge.className = 'ch-badge recording';
       if (waveformCanvas) waveformCanvas.style.display = 'block';
+
+      this.timerInterval = setInterval(() => {
+        this.secondsRecorded++;
+        const m = String(Math.floor(this.secondsRecorded / 60)).padStart(2, '0');
+        const s = String(this.secondsRecorded % 60).padStart(2, '0');
+        const timeStr = `${m}:${s}`;
+        const btnTimer = this.shadowRoot.getElementById('rec-btn-timer');
+        const badgeTimer = this.shadowRoot.getElementById('rec-badge-timer');
+        if (btnTimer) btnTimer.innerText = timeStr;
+        if (badgeTimer) badgeTimer.innerText = timeStr;
+      }, 1000);
 
       this.startAudioVisualizer();
       if (this.recognition) {
@@ -857,9 +1317,13 @@ class CoreHealthScribeElement extends HTMLElement {
       this.dispatchEvent(new CustomEvent('corehealth:state-change', { detail: 'recording' }));
     } else {
       this.isRecording = false;
+      if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+      }
       recordBtn.classList.remove('recording');
-      recordBtn.innerText = 'Start Dictation';
-      statusBadge.innerText = 'Structuring note & orders...';
+      recordBtn.innerHTML = `${ICONS.mic} <span>Start Dictation</span>`;
+      statusBadge.innerHTML = `${ICONS.sparkle} <span>Structuring note & orders...</span>`;
       statusBadge.className = 'ch-badge';
       if (waveformCanvas) waveformCanvas.style.display = 'none';
 
@@ -870,7 +1334,29 @@ class CoreHealthScribeElement extends HTMLElement {
   }
 
   startAudioVisualizer() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    const canvas = this.shadowRoot.getElementById('waveform-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.parentElement ? canvas.parentElement.clientWidth : 400;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      let phase = 0;
+      const drawSynthetic = () => {
+        if (!this.isRecording) return;
+        this.animFrameId = requestAnimationFrame(drawSynthetic);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        phase += 0.08;
+        const barWidth = canvas.width / 36;
+        for (let i = 0; i < 36; i++) {
+          const h = (Math.sin(phase + i * 0.3) * 0.5 + 0.5) * (canvas.height * 0.8) + 4;
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillRect(i * barWidth + 2, (canvas.height - h) / 2, barWidth - 4, h);
+        }
+      };
+      drawSynthetic();
+      return;
+    }
 
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
       this.audioStream = stream;
@@ -881,11 +1367,7 @@ class CoreHealthScribeElement extends HTMLElement {
       const source = this.audioContext.createMediaStreamSource(stream);
       source.connect(this.audioAnalyser);
 
-      const canvas = this.shadowRoot.getElementById('waveform-canvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
       const dataArray = new Uint8Array(this.audioAnalyser.frequencyBinCount);
-
       const draw = () => {
         if (!this.isRecording) return;
         this.animFrameId = requestAnimationFrame(draw);
@@ -897,9 +1379,9 @@ class CoreHealthScribeElement extends HTMLElement {
         const barWidth = (canvas.width / 40);
         let x = 0;
         for (let i = 0; i < 40; i++) {
-          const barHeight = (dataArray[i * 4] / 255) * canvas.height;
+          const barHeight = Math.max(3, (dataArray[i * 4] / 255) * canvas.height);
           ctx.fillStyle = '#38bdf8';
-          ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+          ctx.fillRect(x + 1, canvas.height - barHeight, barWidth - 2, barHeight);
           x += barWidth;
         }
       };
@@ -911,6 +1393,10 @@ class CoreHealthScribeElement extends HTMLElement {
 
   stopAudioCapture() {
     if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
     if (this.recognition) {
       try { this.recognition.stop(); } catch (e) {}
     }
@@ -927,12 +1413,15 @@ class CoreHealthScribeElement extends HTMLElement {
   async processDictation() {
     const transcriptInput = this.shadowRoot.getElementById('transcript-input');
     const noteInput = this.shadowRoot.getElementById('note-input');
+    const guide = this.shadowRoot.getElementById('note-empty-guide');
+    const taxSwitcher = this.shadowRoot.getElementById('tax-switcher');
+    const copyBtn = this.shadowRoot.getElementById('btn-copy-note');
     const signBtn = this.shadowRoot.getElementById('btn-sign');
     const statusBadge = this.shadowRoot.getElementById('status-badge');
 
     const text = transcriptInput ? transcriptInput.value.trim() : '';
     if (!text) {
-      statusBadge.innerText = 'Ready';
+      statusBadge.innerHTML = `${ICONS.check} Ready`;
       statusBadge.className = 'ch-badge';
       return;
     }
@@ -965,16 +1454,23 @@ class CoreHealthScribeElement extends HTMLElement {
         this.structuredSections = data.structured_sections || [];
         this.groundedOrders = data.grounded_orders || [];
 
-        // Update Note text
+        // Reveal Structured Note & Tax Switcher (Transition to Step 2 & 3)
+        if (guide) guide.style.display = 'none';
         if (noteInput) {
+          noteInput.style.display = 'block';
           noteInput.value = data.formatted_markdown || '';
         }
+        if (taxSwitcher) taxSwitcher.style.display = 'flex';
+        if (copyBtn) copyBtn.style.display = 'inline-flex';
 
         // Render Orders Deck
         this.renderOrdersTable();
 
+        // Advance stepper to Step 3
+        this.setFlowStep(3);
+
         signBtn.disabled = false;
-        statusBadge.innerText = 'Ready for Review';
+        statusBadge.innerHTML = `${ICONS.check} Ready for Review`;
         statusBadge.className = 'ch-badge success';
         this.saveDraft();
 
@@ -1051,8 +1547,10 @@ class CoreHealthScribeElement extends HTMLElement {
             <input type="text" class="ch-inline-input order-inst" data-idx="${realIdx}" value="${ord.instructions || ''}" placeholder="Instructions / Route">
           </td>
           <td style="font-weight: 600;">₦${((ord.unit_price || 0) * (ord.quantity || 1)).toLocaleString()}</td>
-          <td>
-            <button type="button" class="btn-del-order" data-idx="${realIdx}" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 13px;">✕</button>
+          <td style="text-align: center;">
+            <button type="button" class="btn-del-order ch-btn-icon-del" data-idx="${realIdx}" title="Remove order from staging">
+              ${ICONS.trash}
+            </button>
           </td>
         </tr>
       `;
@@ -1065,7 +1563,9 @@ class CoreHealthScribeElement extends HTMLElement {
       chk.addEventListener('change', (e) => {
         const i = parseInt(e.target.getAttribute('data-idx'), 10);
         this.groundedOrders[i].is_selected = e.target.checked;
-        this.renderOrdersTable();
+        this.groundedOrders[i].selected = e.target.checked;
+        this.updateTariffPreview();
+        this.dispatchEvent(new CustomEvent('corehealth:orders-updated', { detail: this.groundedOrders }));
       });
     });
 
@@ -1091,12 +1591,27 @@ class CoreHealthScribeElement extends HTMLElement {
 
     tbody.querySelectorAll('.btn-del-order').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const i = parseInt(e.target.getAttribute('data-idx'), 10);
+        const targetBtn = e.target.closest('.btn-del-order');
+        if (!targetBtn) return;
+        const i = parseInt(targetBtn.getAttribute('data-idx'), 10);
         this.groundedOrders.splice(i, 1);
         this.renderOrdersTable();
         this.saveDraft();
+        this.dispatchEvent(new CustomEvent('corehealth:orders-updated', { detail: this.groundedOrders }));
       });
     });
+  }
+
+  updateTariffPreview() {
+    const tariffEl = this.shadowRoot.getElementById('tariff-preview');
+    if (!tariffEl) return;
+    let totalTariff = 0;
+    this.groundedOrders.forEach(ord => {
+      if (ord.is_selected) {
+        totalTariff += (ord.unit_price || 0) * (ord.quantity || 1);
+      }
+    });
+    tariffEl.innerText = `Total Staged: ${this.groundedOrders.filter(o => o.is_selected).length} items · Estimated Tariff: ₦${totalTariff.toLocaleString()}`;
   }
 
   async switchTaxonomy(newTaxonomy) {
@@ -1135,33 +1650,15 @@ class CoreHealthScribeElement extends HTMLElement {
   }
 
   promptAddOrder() {
-    const name = window.prompt('Enter medication, lab investigation, or procedure name:');
-    if (!name || !name.trim()) return;
-
-    this.groundedOrders.push({
-      id: 'ord_' + (this.groundedOrders.length + 1),
-      order_type: 'PRODUCT',
-      service_type: 'product',
-      category_id: 4,
-      category_name: 'Manual Order',
-      catalog_id: null,
-      item_name: name.trim(),
-      dosage: '1 tab',
-      frequency: 'OD',
-      duration: '5 days',
-      route: 'oral',
-      quantity: 1,
-      instructions: 'Take as directed',
-      unit_price: 500.0,
-      target_queue: 'dispensing_queue',
-      is_selected: true,
-      is_matched: false,
-      is_free_form: true,
-      safety_warning: null,
-    });
-
-    this.renderOrdersTable();
-    this.saveDraft();
+    const modal = this.shadowRoot.getElementById('modal-add-order');
+    const moName = this.shadowRoot.getElementById('mo-name');
+    if (modal) {
+      modal.style.display = 'flex';
+      if (moName) {
+        moName.value = '';
+        moName.focus();
+      }
+    }
   }
 
   async handleSignOff() {
@@ -1174,7 +1671,7 @@ class CoreHealthScribeElement extends HTMLElement {
     if (!finalNote) return;
 
     signBtn.disabled = true;
-    signBtn.innerText = 'Signing Note & Orders...';
+    signBtn.innerHTML = `<span>Signing Note & Orders...</span>`;
 
     const baseUrl = (this.getAttribute('base-url') || '').replace(/\/+$/, '');
     const token = this.getAttribute('sdk-token') || '';
@@ -1211,8 +1708,8 @@ class CoreHealthScribeElement extends HTMLElement {
       });
       const compData = await compRes.json();
 
-      signBtn.innerText = '✓ Signed';
-      statusBadge.innerText = '✓ Signed Off';
+      signBtn.innerHTML = `${ICONS.check} <span>Signed</span>`;
+      statusBadge.innerHTML = `${ICONS.check} <span>Signed Off</span>`;
       statusBadge.className = 'ch-badge success';
 
       this.clearDraft();
@@ -1235,7 +1732,7 @@ class CoreHealthScribeElement extends HTMLElement {
     } catch (e) {
       console.error('Error signing scribe session', e);
       signBtn.disabled = false;
-      signBtn.innerText = 'Accept & Sign Note & Orders';
+      signBtn.innerHTML = `${ICONS.sign} <span>Accept & Sign Note & Orders</span>`;
     }
   }
 
@@ -1274,11 +1771,24 @@ class CoreHealthScribeElement extends HTMLElement {
 
       const transcriptInput = this.shadowRoot.getElementById('transcript-input');
       const noteInput = this.shadowRoot.getElementById('note-input');
+      const guide = this.shadowRoot.getElementById('note-empty-guide');
+      const taxSwitcher = this.shadowRoot.getElementById('tax-switcher');
+      const copyBtn = this.shadowRoot.getElementById('btn-copy-note');
       const notice = this.shadowRoot.getElementById('draft-notice');
       const label = this.shadowRoot.getElementById('draft-time-label');
 
-      if (draft.transcript && transcriptInput) transcriptInput.value = draft.transcript;
-      if (draft.note && noteInput) noteInput.value = draft.note;
+      if (draft.transcript && transcriptInput) {
+        transcriptInput.value = draft.transcript;
+        this.onTranscriptChanged(draft.transcript);
+      }
+      if (draft.note && noteInput) {
+        noteInput.value = draft.note;
+        noteInput.style.display = 'block';
+        if (guide) guide.style.display = 'none';
+        if (taxSwitcher) taxSwitcher.style.display = 'flex';
+        if (copyBtn) copyBtn.style.display = 'inline-flex';
+        this.setFlowStep(3);
+      }
       if (draft.taxonomy) this.taxonomy = draft.taxonomy;
       if (draft.structuredSections) this.structuredSections = draft.structuredSections;
       if (draft.groundedOrders) {
