@@ -13,7 +13,7 @@ npm install @corehealth/scribe-sdk
 
 ### Option B: CDN / Direct `<script>` Tag (Vanilla HTML / PHP / Blade / Django Templates)
 ```html
-<script src="https://api.corehealth.ng/js/corehealth-scribe-sdk.umd.js"></script>
+<script src="https://corehealth.corestream.ng/js/corehealth-scribe-sdk.umd.js"></script>
 ```
 
 ---
@@ -66,7 +66,7 @@ const { sdk_token } = await tokenRes.json();
 
 // 2. Initialize Scribe Studio
 const scribe = new CoreHealthScribe({
-  baseUrl: 'https://api.corehealth.ng', // Or your local Edge Node IP
+  baseUrl: 'https://corehealth.corestream.ng', // Or your local Edge Node IP
   sdkToken: sdk_token,
   track: 'web-component', // Or 'iframe' for strict CSP
   mountTarget: '#scribe-container',

@@ -32,6 +32,13 @@ export class IFrameBridge {
     if (this.options.patientId) params.set('patient_id', String(this.options.patientId));
     if (this.options.encounterId) params.set('encounter_id', String(this.options.encounterId));
     if (this.options.patientSummary) params.set('patient_summary', String(this.options.patientSummary));
+    if (this.options.role) params.set('role', String(this.options.role));
+    if (this.options.taxonomy) params.set('taxonomy', String(this.options.taxonomy));
+    if (this.options.customCatalog) {
+      params.set('custom_catalog', typeof this.options.customCatalog === 'string'
+        ? this.options.customCatalog
+        : JSON.stringify(this.options.customCatalog));
+    }
 
     const iframe = document.createElement('iframe');
     iframe.src = `${baseUrl}/scribe?${params.toString()}`;
@@ -93,6 +100,12 @@ export class IFrameBridge {
       case 'corehealth:note-ready':
         if (typeof this.options.onStateChange === 'function') {
           this.options.onStateChange('reviewing');
+        }
+        break;
+
+      case 'corehealth:orders-updated':
+        if (typeof this.options.onOrdersUpdated === 'function') {
+          this.options.onOrdersUpdated(data.payload || []);
         }
         break;
 

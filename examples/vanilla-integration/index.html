@@ -166,6 +166,7 @@
         const res = await fetch('/ch-scribe-token?patient_id=492&encounter_id=1017');
         const data = await res.json();
         currentToken = data.sdk_token;
+        window.COREHEALTH_BASE_URL = data.corehealth_base_url || window.location.origin;
 
         tokenInfo.textContent = `Token: ${currentToken.substring(0, 16)}... (Expires in ${data.expires_in}s)`;
         statusLabel.textContent = 'Token minted successfully. Mounting AI Scribe Studio...';
@@ -189,13 +190,49 @@
       // Use the global CoreHealth SDK library
       const { CoreHealthScribe } = window.CoreHealth;
 
+      // Define super-compressed catalog from partner EMR (CSCP protocol)
+      const partnerCatalog = CoreHealthScribe.compressCatalog([
+        {
+          id: 'partner_lab',
+          name: 'Partner Clinical Diagnostics',
+          type: 'LAB',
+          items: [
+            { id: 'p-lab-101', name: 'Full Blood Count (FBC)', price: 2500 },
+            { id: 'p-lab-102', name: 'Malaria Rapid Antigen Test (RDT)', price: 1500 },
+            { id: 'p-lab-103', name: 'Random Blood Sugar (RBS)', price: 800 }
+          ]
+        },
+        {
+          id: 'partner_rx',
+          name: 'Partner Dispensary & Pharmacy',
+          type: 'RX',
+          items: [
+            { id: 'p-rx-201', name: 'Paracetamol 500mg Tablet', price: 300 },
+            { id: 'p-rx-202', name: 'Amoxicillin 500mg Capsule', price: 600 },
+            { id: 'p-rx-203', name: 'Artemether-Lumefantrine 80/480mg', price: 1200 }
+          ]
+        },
+        {
+          id: 'partner_rad',
+          name: 'Partner Medical Imaging',
+          type: 'RAD',
+          items: [
+            { id: 'p-rad-301', name: 'Chest X-Ray (PA View)', price: 5000 },
+            { id: 'p-rad-302', name: 'Abdominal Ultrasound Scan', price: 6500 }
+          ]
+        }
+      ]);
+
       currentScribe = new CoreHealthScribe({
-        baseUrl: window.location.origin, // Proxied or host
+        baseUrl: window.COREHEALTH_BASE_URL || window.location.origin,
         sdkToken: currentToken,
         track: track,
         mountTarget: '#scribe-mount',
         patientId: 492,
         encounterId: 1017,
+        role: 'doctor',
+        taxonomy: 'soap',
+        customCatalog: partnerCatalog,
         locale: 'en-NG',
         theme: 'light',
 

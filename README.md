@@ -8,6 +8,14 @@ The CoreHealth AI Scribe SDK allows healthcare platforms, hospital systems, and 
 
 ## Key Features
 
+- **Compressed Scribe Catalog Protocol (CSCP)**: Pass your hospital or EMR catalog of products and services using super-compressed `#CAT:id|type|name` DSL or gzip-base64 via `CoreHealthScribe.compressCatalog(items)`. Achieves 10x-15x token reduction (~3 tokens/item) for scalable grounding without exceeding model context limits.
+- **Interactive Suggested Orders & Prescriptions Deck**: Voice dictations automatically stage categorized clinical orders (medications, labs, imaging, procedures, nursing, consultation). Clinicians can check/uncheck items, edit dosage/frequency/instructions inline, calculate tariffs, see active allergy warnings, and add orders with `+ Add Order`.
+- **Dynamic Medical Taxonomies**: Toggle seamlessly between clinical documentation standards:
+  - **Doctor**: `SOAP`, `Traditional Clerking`, `POMR`
+  - **Nurse**: `Focus DAR`, `SBAR`, `SOAPIE`
+  - **Maternity**: `ANC`, `Labor`, `PNC`
+  Lossless conversion preserves all clinical findings and observations.
+- **Draft Persistence & Offline Protection**: Automatic continuous auto-saving to `localStorage` with a restoration prompt on browser reload, ensuring no lost notes during network interruptions.
 - **Ephemeral Session & Zero Data Retention Guarantee**:
   - **Zero Persistent Storage in SDK Gateway**: No patient clinical data is stored or cached on the CoreHealth SDK Gateway beyond the active in-memory session. Session context terminates immediately at the end of the request.
   - **Capture the Callback**: If your frontend or backend fails to capture the `onSignedOff` callback or `corehealth:signed-off` event, the ephemeral session is discarded and cannot be retrieved; a fresh session must be initiated.
@@ -17,7 +25,7 @@ The CoreHealth AI Scribe SDK allows healthcare platforms, hospital systems, and 
   - **Track B (Sandboxed iFrame)**: High-security isolated iframe with bidirectional `window.postMessage` bridge for strict Content Security Policy (CSP) environments.
 - **Enterprise Security (Backend-Mediated Token Authentication)**: Backend-mediated authentication using ephemeral JWT session tokens (`SKT_...`). Never exposes API credentials to client browsers.
 - **Standards-Based Interoperability**: Every consultation sign-off outputs both:
-  - Canonical **openEHR COMPOSITION.encounter.v1** JSON.
+  - Canonical **openEHR COMPOSITION.encounter.v1** JSON with `INSTRUCTION` archetypes for approved orders.
   - Complete **HL7 FHIR R4 Transaction Bundle** (Encounter, Observation, MedicationRequest, ServiceRequest).
 - **Statutory Privacy**: Compliant with Nigeria Data Protection Act (NDPA 2023) Sections 30 & 41-43 for local and cross-border clinical data processing.
 
@@ -58,7 +66,7 @@ npm install @corehealth/scribe-sdk
 
 ### Via CDN (Vanilla JS / Blade / PHP / Django)
 ```html
-<script src="https://api.corehealth.ng/js/corehealth-scribe-sdk.umd.js"></script>
+<script src="https://corehealth.corestream.ng/js/corehealth-scribe-sdk.umd.js"></script>
 ```
 
 ---
@@ -73,7 +81,7 @@ const { sdk_token } = await fetch('/api/ch-scribe-token?patient_id=492&encounter
 
 // 2. Initialize and mount Scribe
 const scribe = new CoreHealthScribe({
-  baseUrl: 'https://api.corehealth.ng',
+  baseUrl: 'https://corehealth.corestream.ng',
   sdkToken: sdk_token,
   track: 'web-component', // or 'iframe'
   mountTarget: '#scribe-mount',

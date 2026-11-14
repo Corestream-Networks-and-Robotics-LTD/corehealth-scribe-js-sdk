@@ -82,6 +82,7 @@ const server = http.createServer(async (req, res) => {
 
       if (response.ok) {
         const tokenData = await response.json();
+        tokenData.corehealth_base_url = CH_BASE_URL;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(tokenData));
         return;
@@ -136,6 +137,7 @@ const server = http.createServer(async (req, res) => {
         persisted_at: new Date().toISOString(),
         audit_id: payload.audit_id || Math.floor(Math.random() * 1000) + 1,
         final_signed_note: payload.final_signed_note,
+        approved_orders: payload.approved_orders || [],
         openehr_composition: payload.openehr_composition || {
           _type: 'COMPOSITION',
           name: { _type: 'DV_TEXT', value: 'AI Scribe Consultation Summary' },
@@ -181,6 +183,42 @@ const server = http.createServer(async (req, res) => {
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(compositions, null, 2));
+    });
+    return;
+  }
+
+  // 4. Transparent Reverse Proxy for /api/sdk/*, /scribe*, /css/*, and /js/corehealth*
+  if (pathname.startsWith('/api/sdk/') || pathname.startsWith('/scribe') || pathname.startsWith('/css/') || pathname.startsWith('/js/corehealth')) {
+    const targetUrl = `${CH_BASE_URL}${req.url}`;
+    const forwardHeaders = { ...req.headers };
+    delete forwardHeaders.host;
+    delete forwardHeaders.connection;
+
+    let chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', async () => {
+      try {
+        const proxyResp = await fetch(targetUrl, {
+          method: req.method,
+          headers: forwardHeaders,
+          body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks)
+        });
+
+        const respHeaders = {};
+        proxyResp.headers.forEach((val, key) => {
+          if (key.toLowerCase() !== 'content-encoding') {
+            respHeaders[key] = val;
+          }
+        });
+
+        res.writeHead(proxyResp.status, respHeaders);
+        const arrayBuf = await proxyResp.arrayBuffer();
+        res.end(Buffer.from(arrayBuf));
+      } catch (err) {
+        console.error(`[CoreHealth Proxy] Error proxying ${req.method} ${pathname}:`, err.message);
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `Reverse Proxy Error: ${err.message}` }));
+      }
     });
     return;
   }

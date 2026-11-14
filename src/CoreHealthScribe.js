@@ -55,8 +55,15 @@ export class CoreHealthScribe {
       if (this.options.patientId) el.setAttribute('patient-id', String(this.options.patientId));
       if (this.options.encounterId) el.setAttribute('encounter-id', String(this.options.encounterId));
       if (this.options.patientSummary) el.setAttribute('patient-summary', String(this.options.patientSummary));
-      el.setAttribute('locale', this.options.locale);
-      el.setAttribute('theme', this.options.theme);
+      if (this.options.role) el.setAttribute('role', String(this.options.role));
+      if (this.options.taxonomy) el.setAttribute('taxonomy', String(this.options.taxonomy));
+      if (this.options.customCatalog) {
+        el.setAttribute('custom-catalog', typeof this.options.customCatalog === 'string'
+          ? this.options.customCatalog
+          : JSON.stringify(this.options.customCatalog));
+      }
+      el.setAttribute('locale', this.options.locale || 'en-NG');
+      el.setAttribute('theme', this.options.theme || 'light');
 
       // Bind custom element event listeners
       if (typeof this.options.onSignedOff === 'function') {
@@ -64,6 +71,9 @@ export class CoreHealthScribe {
       }
       if (typeof this.options.onStateChange === 'function') {
         el.addEventListener('corehealth:state-change', (e) => this.options.onStateChange(e.detail));
+      }
+      if (typeof this.options.onOrdersUpdated === 'function') {
+        el.addEventListener('corehealth:orders-updated', (e) => this.options.onOrdersUpdated(e.detail));
       }
 
       target.innerHTML = '';
@@ -102,6 +112,44 @@ export class CoreHealthScribe {
     if (this.element) {
       this.element.setAttribute('sdk-token', sdkToken);
     }
+  }
+
+  /**
+   * Super-Compress partner EMR categories and items into CSCP compact format.
+   * Compresses 500+ hospital items into ~1,500 LLM tokens (10x-15x smaller than raw JSON).
+   */
+  static compressCatalog(categories = []) {
+    const lines = [];
+    for (const cat of categories) {
+      const catId = cat.id || 'cat';
+      const catType = (cat.type || 'SERVICE').toUpperCase();
+      const catName = cat.name || catId;
+      lines.push(`#CAT:${catId}|${catType}|${catName}`);
+
+      const itemTokens = [];
+      const items = cat.items || [];
+      for (const it of items) {
+        if (typeof it === 'string') {
+          itemTokens.push(it);
+        } else {
+          const id = it.id || it.catalog_id || '';
+          const name = it.name || it.item_name || '';
+          const code = it.code || '';
+          const price = it.price ?? it.unit_price ?? '';
+          if (price !== '' && code !== '') {
+            itemTokens.push(`${id}:${code}:${name}:${price}`);
+          } else if (code !== '') {
+            itemTokens.push(`${id}:${code}:${name}`);
+          } else {
+            itemTokens.push(`${id}:${name}`);
+          }
+        }
+      }
+      if (itemTokens.length > 0) {
+        lines.push(itemTokens.join('|'));
+      }
+    }
+    return lines.join('\n');
   }
 }
 

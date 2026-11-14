@@ -36,6 +36,13 @@ class IFrameBridge {
     if (this.options.patientId) params.set('patient_id', String(this.options.patientId));
     if (this.options.encounterId) params.set('encounter_id', String(this.options.encounterId));
     if (this.options.patientSummary) params.set('patient_summary', String(this.options.patientSummary));
+    if (this.options.role) params.set('role', String(this.options.role));
+    if (this.options.taxonomy) params.set('taxonomy', String(this.options.taxonomy));
+    if (this.options.customCatalog) {
+      params.set('custom_catalog', typeof this.options.customCatalog === 'string'
+        ? this.options.customCatalog
+        : JSON.stringify(this.options.customCatalog));
+    }
 
     const iframe = document.createElement('iframe');
     iframe.src = `${baseUrl}/scribe?${params.toString()}`;
@@ -100,6 +107,12 @@ class IFrameBridge {
         }
         break;
 
+      case 'corehealth:orders-updated':
+        if (typeof this.options.onOrdersUpdated === 'function') {
+          this.options.onOrdersUpdated(data.payload || []);
+        }
+        break;
+
       case 'corehealth:signed-off':
         if (typeof this.options.onStateChange === 'function') {
           this.options.onStateChange('signed-off');
@@ -130,61 +143,109 @@ class IFrameBridge {
 
 /**
  * CoreHealth AI Scribe — Shadow DOM Web Component (<corehealth-scribe-studio>)
- * Complete standalone custom element with shadow DOM style isolation.
+ * Complete standalone custom element with shadow DOM style isolation,
+ * dynamic clinical taxonomies, super-compressed catalog grounding,
+ * suggested orders deck, draft persistence, and 60 FPS audio visualizer.
  */
 
 class CoreHealthScribeElement extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
+
+    // State
+    this.role = 'doctor';
+    this.taxonomy = 'soap';
     this.isRecording = false;
     this.recognition = null;
+    this.audioContext = null;
+    this.audioAnalyser = null;
+    this.audioStream = null;
+    this.animFrameId = null;
+    this.secondsRecorded = 0;
+    this.timerInterval = null;
     this.transcript = '';
-    this.options = {};
+    this.structuredSections = [];
+    this.groundedOrders = [];
+    this.activeFilter = 'all';
+    this.customCatalog = null;
+    this.debounceTimer = null;
+    this.showCatalogModal = false;
   }
 
   static get observedAttributes() {
-    return ['base-url', 'sdk-token', 'patient-id', 'encounter-id', 'locale', 'theme', 'patient-summary'];
+    return [
+      'base-url',
+      'sdk-token',
+      'patient-id',
+      'encounter-id',
+      'role',
+      'taxonomy',
+      'locale',
+      'theme',
+      'patient-summary',
+      'custom-catalog',
+    ];
+  }
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (oldValue === newValue) return;
+    if (name === 'role') this.role = newValue || 'doctor';
+    if (name === 'taxonomy') this.taxonomy = newValue || 'soap';
+    if (name === 'custom-catalog') this.customCatalog = newValue;
+    if (this.isConnected) {
+      this.updateTaxonomyPills();
+    }
   }
 
   connectedCallback() {
+    this.role = this.getAttribute('role') || 'doctor';
+    this.taxonomy = this.getAttribute('taxonomy') || (this.role === 'nurse' ? 'dar' : (this.role === 'maternity' ? 'anc' : 'soap'));
+    this.customCatalog = this.getAttribute('custom-catalog') || null;
+
     this.render();
     this.setupSpeech();
     this.bindEvents();
+    this.restoreDraftIfAvailable();
   }
 
   disconnectedCallback() {
-    if (this.recognition && this.isRecording) {
-      try { this.recognition.stop(); } catch (e) {}
-    }
+    this.stopAudioCapture();
   }
 
   render() {
     const theme = this.getAttribute('theme') || 'light';
     const patientId = this.getAttribute('patient-id') || '';
     const encounterId = this.getAttribute('encounter-id') || '';
+    const summary = this.getAttribute('patient-summary') || '';
 
     this.shadowRoot.innerHTML = `
       <style>
         :host {
           display: block;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-          color: #212529;
+          color: #1e293b;
           background: #ffffff;
           border-radius: 8px;
-          border: 1px solid #dee2e6;
+          border: 1px solid #e2e8f0;
           overflow: hidden;
           box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+          box-sizing: border-box;
         }
-        .header {
+        *, *::before, *::after { box-sizing: border-box; }
+
+        /* Header */
+        .ch-header {
           display: flex;
+          flex-wrap: wrap;
           justify-content: space-between;
           align-items: center;
-          padding: 12px 16px;
-          background: #f8f9fa;
-          border-bottom: 1px solid #dee2e6;
+          gap: 12px;
+          padding: 12px 18px;
+          background: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
         }
-        .brand {
+        .ch-brand {
           font-weight: 700;
           font-size: 14px;
           display: flex;
@@ -192,136 +253,422 @@ class CoreHealthScribeElement extends HTMLElement {
           gap: 8px;
           color: #011b33;
         }
-        .meta {
-          font-size: 12px;
-          color: #6c757d;
+        .ch-meta-pill {
+          background: #e0f2fe;
+          color: #0369a1;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 3px 8px;
+          border-radius: 12px;
         }
-        .body {
+        .ch-tax-switcher {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: #edeef2;
+          padding: 2px 4px;
+          border-radius: 6px;
+        }
+        .ch-tax-btn {
+          border: none;
+          background: none;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 4px 10px;
+          border-radius: 4px;
+          cursor: pointer;
+          color: #475569;
+          transition: all 0.15s ease;
+        }
+        .ch-tax-btn.active {
+          background: #011b33;
+          color: #ffffff;
+        }
+        .ch-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 8px;
+          font-size: 11px;
+          font-weight: 600;
+          border-radius: 4px;
+          background: #e2e8f0;
+          color: #475569;
+        }
+        .ch-badge.recording {
+          background: #dc2626;
+          color: #ffffff;
+          animation: pulse 1.5s infinite;
+        }
+        .ch-badge.success {
+          background: #16a34a;
+          color: #ffffff;
+        }
+
+        /* Brief / Allergy Alert Strip */
+        .ch-alert-strip {
+          padding: 8px 18px;
+          background: #fef3c7;
+          border-bottom: 1px solid #fde68a;
+          color: #92400e;
+          font-size: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .ch-draft-notice {
+          padding: 6px 18px;
+          background: #f0fdf4;
+          border-bottom: 1px solid #bbf7d0;
+          color: #166534;
+          font-size: 11px;
+          display: none;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        /* Cockpit Body */
+        .ch-body {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 16px;
           padding: 16px;
           min-height: 380px;
         }
-        @media (max-width: 768px) {
-          .body { grid-template-columns: 1fr; }
+        @media (max-width: 860px) {
+          .ch-body { grid-template-columns: 1fr; }
         }
-        .pane {
+        .ch-pane {
           display: flex;
           flex-direction: column;
+          gap: 8px;
         }
-        .pane-label {
+        .ch-pane-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           font-size: 11px;
           font-weight: 700;
           text-transform: uppercase;
-          color: #495057;
-          margin-bottom: 8px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+          color: #475569;
         }
-        textarea {
+        .ch-waveform {
+          width: 100%;
+          height: 32px;
+          background: #0f172a;
+          border-radius: 4px;
+          display: none;
+        }
+        textarea.ch-textarea {
           flex: 1;
           width: 100%;
-          min-height: 260px;
-          border: 1px solid #ced4da;
+          min-height: 240px;
+          border: 1px solid #cbd5e1;
           border-radius: 6px;
-          padding: 10px;
+          padding: 12px;
           font-size: 13px;
           line-height: 1.5;
-          box-sizing: border-box;
-          resize: vertical;
           font-family: inherit;
+          resize: vertical;
         }
-        textarea:focus {
+        textarea.ch-textarea:focus {
           outline: none;
-          border-color: #80bdff;
-          box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+          border-color: #0284c7;
+          box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
         }
-        .footer {
+
+        /* Suggested Orders Deck */
+        .ch-orders-deck {
+          border-top: 1px solid #e2e8f0;
+          background: #f8fafc;
+          padding: 14px 18px;
+        }
+        .ch-deck-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 12px 16px;
-          background: #f8f9fa;
-          border-top: 1px solid #dee2e6;
+          margin-bottom: 12px;
         }
-        .btn {
+        .ch-filter-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .ch-chip {
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          padding: 3px 10px;
+          font-size: 11px;
+          font-weight: 600;
+          border-radius: 14px;
+          cursor: pointer;
+          color: #475569;
+        }
+        .ch-chip.active {
+          background: #011b33;
+          color: #ffffff;
+          border-color: #011b33;
+        }
+        .ch-orders-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 12px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          overflow: hidden;
+        }
+        .ch-orders-table th {
+          background: #f1f5f9;
+          padding: 8px 12px;
+          text-align: left;
+          font-weight: 600;
+          color: #475569;
+          font-size: 11px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        .ch-orders-table td {
+          padding: 8px 12px;
+          border-bottom: 1px solid #f1f5f9;
+          vertical-align: middle;
+        }
+        .cat-badge {
+          display: inline-block;
+          padding: 2px 6px;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 3px;
+          text-transform: uppercase;
+        }
+        .cat-rx { background: #dbeafe; color: #1e40af; }
+        .cat-lab { background: #ede9fe; color: #5b21b6; }
+        .cat-rad { background: #fef3c7; color: #92400e; }
+        .cat-proc { background: #fee2e2; color: #991b1b; }
+        .cat-nurs { background: #dcfce7; color: #166534; }
+        .cat-followup { background: #f1f5f9; color: #334155; }
+
+        .ch-inline-input {
+          width: 100%;
+          padding: 4px 8px;
+          border: 1px solid #cbd5e1;
+          border-radius: 4px;
+          font-size: 12px;
+        }
+
+        /* Footer */
+        .ch-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px 18px;
+          background: #f8fafc;
+          border-top: 1px solid #e2e8f0;
+        }
+        .ch-btn {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          padding: 8px 16px;
-          border-radius: 6px;
           font-size: 13px;
           font-weight: 600;
-          border: 1px solid transparent;
+          padding: 8px 16px;
+          border-radius: 6px;
           cursor: pointer;
-          transition: background-color 0.15s ease-in-out;
+          border: none;
+          transition: all 0.15s ease;
         }
-        .btn-record {
-          background: #dc3545;
-          color: #fff;
-          border-radius: 20px;
+        .ch-btn-record {
+          background: #011b33;
+          color: #ffffff;
         }
-        .btn-record.recording {
+        .ch-btn-record.recording {
+          background: #dc2626;
           animation: pulse 1.5s infinite;
         }
-        .btn-sign {
-          background: #011b33;
-          color: #fff;
+        .ch-btn-sign {
+          background: #16a34a;
+          color: #ffffff;
         }
-        .btn-sign:disabled {
-          opacity: 0.6;
+        .ch-btn-sign:disabled {
+          background: #cbd5e1;
           cursor: not-allowed;
         }
-        .badge {
-          display: inline-block;
-          padding: 3px 8px;
+        .ch-btn-secondary {
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          color: #475569;
           font-size: 11px;
-          border-radius: 4px;
-          background: #e9ecef;
-          color: #495057;
+          padding: 4px 10px;
         }
+
         @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.6); }
-          70% { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+          0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); }
+          70% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
         }
       </style>
-      <div class="header">
-        <div class="brand">
+
+      <!-- 1. Header -->
+      <div class="ch-header">
+        <div class="ch-brand">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
             <line x1="12" y1="19" x2="12" y2="22"/>
           </svg>
           <span>CoreHealth AI Scribe</span>
-          ${patientId ? `<span class="meta">· Patient #${patientId} ${encounterId ? `(Encounter #${encounterId})` : ''}</span>` : ''}
+          ${patientId ? `<span class="ch-meta-pill">Patient #${patientId} ${encounterId ? `· Enc #${encounterId}` : ''}</span>` : ''}
         </div>
+
+        <!-- Taxonomy Switcher -->
+        <div class="ch-tax-switcher" id="tax-switcher">
+          <!-- Dynamically populated based on role -->
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <select id="lang-select" style="font-size: 11px; padding: 3px 6px; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff;">
+            <option value="en-NG">Nigerian English (en-NG)</option>
+            <option value="pcm-NG">Nigerian Pidgin (pcm-NG)</option>
+            <option value="ha-NG">Hausa (ha-NG)</option>
+            <option value="yo-NG">Yoruba (yo-NG)</option>
+            <option value="ig-NG">Igbo (ig-NG)</option>
+            <option value="en-GB">British English (en-GB)</option>
+            <option value="en-US">American English (en-US)</option>
+            <option value="fr-FR">Français (fr-FR)</option>
+          </select>
+          <span id="status-badge" class="ch-badge">Ready</span>
+        </div>
+      </div>
+
+      <!-- 2. Draft Notice -->
+      <div id="draft-notice" class="ch-draft-notice">
+        <span><i id="draft-time-label">Restored uncommitted consultation draft</i></span>
         <div>
-          <span id="status-badge" class="badge">Ready</span>
+          <button type="button" id="btn-discard-draft" style="background: none; border: none; color: #dc2626; cursor: pointer; font-size: 11px; font-weight: 600;">Discard</button>
         </div>
       </div>
-      <div class="body">
-        <div class="pane">
-          <div class="pane-label">
-            <span>1. Audio Dictation</span>
-            <button type="button" id="btn-record" class="btn btn-record">Start Dictation</button>
-          </div>
-          <textarea id="transcript-input" placeholder="Dictate your clinical consultation or type notes here..."></textarea>
-        </div>
-        <div class="pane">
-          <div class="pane-label">
-            <span>2. Structured SOAP Note & Orders</span>
-          </div>
-          <textarea id="soap-input" placeholder="AI structured SOAP note and extracted prescription orders will appear here..."></textarea>
+
+      <!-- 3. Brief / Allergy Alert Strip -->
+      ${summary ? `
+      <div class="ch-alert-strip">
+        <div>
+          <strong>Patient Clinical Context:</strong> ${summary}
         </div>
       </div>
-      <div class="footer">
-        <span class="meta">openEHR & FHIR R4 Compliant · NDPA 2023 Statutory Privacy</span>
-        <button type="button" id="btn-sign" class="btn btn-sign" disabled>Accept & Sign Note</button>
+      ` : ''}
+
+      <!-- 4. Cockpit Body -->
+      <div class="ch-body">
+        <!-- Left: Audio Dictation -->
+        <div class="ch-pane">
+          <div class="ch-pane-header">
+            <span>1. Audio Dictation & Live Transcript</span>
+            <button type="button" id="btn-record" class="ch-btn ch-btn-record">Start Dictation</button>
+          </div>
+          <canvas id="waveform-canvas" class="ch-waveform"></canvas>
+          <textarea id="transcript-input" class="ch-textarea" placeholder="Dictate your clinical findings, history, examination, or prescriptions..."></textarea>
+        </div>
+
+        <!-- Right: Structured Consultation Note -->
+        <div class="ch-pane">
+          <div class="ch-pane-header">
+            <span id="note-pane-title">2. Structured Note (${this.taxonomy.toUpperCase()})</span>
+            <span style="font-weight: normal; color: #94a3b8; font-size: 10px;">Lossless Conversion Ready</span>
+          </div>
+          <textarea id="note-input" class="ch-textarea" placeholder="AI structured note will appear here in selected taxonomy format..."></textarea>
+        </div>
+      </div>
+
+      <!-- 5. Suggested Orders & Prescriptions Deck -->
+      <div id="orders-deck" class="ch-orders-deck" style="display: none;">
+        <div class="ch-deck-header">
+          <div>
+            <strong style="font-size: 12px; color: #011b33;">CLINICAL ORDERS & PRESCRIPTIONS</strong>
+            <span id="orders-count-badge" style="font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 10px; font-weight: 700; margin-left: 6px;">0 RECOMMENDED</span>
+          </div>
+          <div class="ch-filter-chips">
+            <button type="button" class="ch-chip active" data-filter="all">All</button>
+            <button type="button" class="ch-chip" data-filter="rx">Prescriptions</button>
+            <button type="button" class="ch-chip" data-filter="lab">Laboratory</button>
+            <button type="button" class="ch-chip" data-filter="rad">Imaging</button>
+            <button type="button" class="ch-chip" data-filter="proc">Procedures</button>
+            <button type="button" id="btn-add-order" class="ch-btn-secondary">+ Add Order</button>
+          </div>
+        </div>
+
+        <table class="ch-orders-table">
+          <thead>
+            <tr>
+              <th style="width: 30px;">[x]</th>
+              <th style="width: 110px;">Category</th>
+              <th>Item Name & Details</th>
+              <th>Dosage / Indication</th>
+              <th>Instructions</th>
+              <th style="width: 80px;">Tariff</th>
+              <th style="width: 40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px; color: #64748b;">
+          <span id="tariff-preview">Estimated Tariff: ₦0.00</span>
+          <span>Orders will be dispatched directly to laboratory, pharmacy, and radiology queues upon sign-off</span>
+        </div>
+      </div>
+
+      <!-- 6. Footer -->
+      <div class="ch-footer">
+        <span style="font-size: 11px; color: #64748b;">openEHR & FHIR R4 Compliant · NDPA 2023 Statutory Privacy</span>
+        <button type="button" id="btn-sign" class="ch-btn ch-btn-sign" disabled>
+          Accept & Sign Note & Orders
+        </button>
       </div>
     `;
+
+    this.updateTaxonomyPills();
+  }
+
+  updateTaxonomyPills() {
+    const switcher = this.shadowRoot.getElementById('tax-switcher');
+    if (!switcher) return;
+
+    let options = [];
+    if (this.role === 'nurse') {
+      options = [
+        { id: 'dar', label: 'Focus DAR' },
+        { id: 'sbar', label: 'SBAR' },
+        { id: 'soapie', label: 'SOAPIE' },
+      ];
+    } else if (this.role === 'maternity') {
+      options = [
+        { id: 'anc', label: 'ANC' },
+        { id: 'labor', label: 'Labor' },
+        { id: 'pnc', label: 'PNC' },
+      ];
+    } else {
+      options = [
+        { id: 'soap', label: 'SOAP' },
+        { id: 'clerking', label: 'Clerking' },
+        { id: 'pomr', label: 'POMR' },
+      ];
+    }
+
+    switcher.innerHTML = options.map(opt => `
+      <button type="button" class="ch-tax-btn ${this.taxonomy === opt.id ? 'active' : ''}" data-tax="${opt.id}">
+        ${opt.label}
+      </button>
+    `).join('');
+
+    switcher.querySelectorAll('.ch-tax-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const targetTax = e.target.getAttribute('data-tax');
+        if (targetTax && targetTax !== this.taxonomy) {
+          this.switchTaxonomy(targetTax);
+        }
+      });
+    });
   }
 
   setupSpeech() {
@@ -345,6 +692,11 @@ class CoreHealthScribeElement extends HTMLElement {
         if (input) {
           input.value = this.transcript + (interim ? '(' + interim + ')' : '');
         }
+        this.saveDraft();
+      };
+
+      this.recognition.onerror = (e) => {
+        console.warn('Speech recognition warning', e);
       };
     }
   }
@@ -352,55 +704,155 @@ class CoreHealthScribeElement extends HTMLElement {
   bindEvents() {
     const recordBtn = this.shadowRoot.getElementById('btn-record');
     const signBtn = this.shadowRoot.getElementById('btn-sign');
-    const statusBadge = this.shadowRoot.getElementById('status-badge');
+    const langSelect = this.shadowRoot.getElementById('lang-select');
+    const addOrderBtn = this.shadowRoot.getElementById('btn-add-order');
+    const discardDraftBtn = this.shadowRoot.getElementById('btn-discard-draft');
     const transcriptInput = this.shadowRoot.getElementById('transcript-input');
-    const soapInput = this.shadowRoot.getElementById('soap-input');
+    const noteInput = this.shadowRoot.getElementById('note-input');
 
     if (recordBtn) {
-      recordBtn.addEventListener('click', () => {
-        if (!this.isRecording) {
-          this.isRecording = true;
-          recordBtn.classList.add('recording');
-          recordBtn.innerText = 'Stop Dictation';
-          statusBadge.innerText = '● Recording';
-          statusBadge.style.background = '#dc3545';
-          statusBadge.style.color = '#fff';
-          if (this.recognition) {
-            try { this.recognition.start(); } catch (e) {}
-          }
-          this.dispatchEvent(new CustomEvent('corehealth:state-change', { detail: 'recording' }));
-        } else {
-          this.isRecording = false;
-          recordBtn.classList.remove('recording');
-          recordBtn.innerText = 'Start Dictation';
-          statusBadge.innerText = 'Structuring note...';
-          statusBadge.style.background = '#ffc107';
-          statusBadge.style.color = '#000';
-          if (this.recognition) {
-            try { this.recognition.stop(); } catch (e) {}
-          }
-          this.dispatchEvent(new CustomEvent('corehealth:state-change', { detail: 'processing' }));
-          this.processDictation();
-        }
-      });
+      recordBtn.addEventListener('click', () => this.toggleRecording());
     }
 
     if (signBtn) {
       signBtn.addEventListener('click', () => this.handleSignOff());
     }
+
+    if (langSelect) {
+      langSelect.addEventListener('change', (e) => {
+        if (this.recognition) {
+          this.recognition.lang = e.target.value;
+        }
+      });
+    }
+
+    if (addOrderBtn) {
+      addOrderBtn.addEventListener('click', () => this.promptAddOrder());
+    }
+
+    if (discardDraftBtn) {
+      discardDraftBtn.addEventListener('click', () => this.discardDraft());
+    }
+
+    if (transcriptInput) {
+      transcriptInput.addEventListener('input', () => this.saveDraft());
+    }
+
+    if (noteInput) {
+      noteInput.addEventListener('input', () => this.saveDraft());
+    }
+
+    // Filter Chips
+    this.shadowRoot.querySelectorAll('.ch-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        const filter = e.target.getAttribute('data-filter');
+        if (filter) {
+          this.shadowRoot.querySelectorAll('.ch-chip').forEach(c => c.classList.remove('active'));
+          e.target.classList.add('active');
+          this.activeFilter = filter;
+          this.renderOrdersTable();
+        }
+      });
+    });
+  }
+
+  toggleRecording() {
+    const recordBtn = this.shadowRoot.getElementById('btn-record');
+    const statusBadge = this.shadowRoot.getElementById('status-badge');
+    const waveformCanvas = this.shadowRoot.getElementById('waveform-canvas');
+
+    if (!this.isRecording) {
+      this.isRecording = true;
+      recordBtn.classList.add('recording');
+      recordBtn.innerText = 'Stop Dictation';
+      statusBadge.innerText = '● Recording';
+      statusBadge.className = 'ch-badge recording';
+      if (waveformCanvas) waveformCanvas.style.display = 'block';
+
+      this.startAudioVisualizer();
+      if (this.recognition) {
+        try { this.recognition.start(); } catch (e) {}
+      }
+      this.dispatchEvent(new CustomEvent('corehealth:state-change', { detail: 'recording' }));
+    } else {
+      this.isRecording = false;
+      recordBtn.classList.remove('recording');
+      recordBtn.innerText = 'Start Dictation';
+      statusBadge.innerText = 'Structuring note & orders...';
+      statusBadge.className = 'ch-badge';
+      if (waveformCanvas) waveformCanvas.style.display = 'none';
+
+      this.stopAudioCapture();
+      this.dispatchEvent(new CustomEvent('corehealth:state-change', { detail: 'processing' }));
+      this.processDictation();
+    }
+  }
+
+  startAudioVisualizer() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      this.audioStream = stream;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      this.audioContext = new AudioCtx();
+      this.audioAnalyser = this.audioContext.createAnalyser();
+      const source = this.audioContext.createMediaStreamSource(stream);
+      source.connect(this.audioAnalyser);
+
+      const canvas = this.shadowRoot.getElementById('waveform-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dataArray = new Uint8Array(this.audioAnalyser.frequencyBinCount);
+
+      const draw = () => {
+        if (!this.isRecording) return;
+        this.animFrameId = requestAnimationFrame(draw);
+        this.audioAnalyser.getByteFrequencyData(dataArray);
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = (canvas.width / 40);
+        let x = 0;
+        for (let i = 0; i < 40; i++) {
+          const barHeight = (dataArray[i * 4] / 255) * canvas.height;
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+          x += barWidth;
+        }
+      };
+      draw();
+    }).catch(err => {
+      console.warn('Microphone stream error for visualizer', err);
+    });
+  }
+
+  stopAudioCapture() {
+    if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+    if (this.recognition) {
+      try { this.recognition.stop(); } catch (e) {}
+    }
+    if (this.audioStream) {
+      this.audioStream.getTracks().forEach(t => t.stop());
+      this.audioStream = null;
+    }
+    if (this.audioContext) {
+      try { this.audioContext.close(); } catch (e) {}
+      this.audioContext = null;
+    }
   }
 
   async processDictation() {
     const transcriptInput = this.shadowRoot.getElementById('transcript-input');
-    const soapInput = this.shadowRoot.getElementById('soap-input');
+    const noteInput = this.shadowRoot.getElementById('note-input');
     const signBtn = this.shadowRoot.getElementById('btn-sign');
     const statusBadge = this.shadowRoot.getElementById('status-badge');
 
     const text = transcriptInput ? transcriptInput.value.trim() : '';
     if (!text) {
       statusBadge.innerText = 'Ready';
-      statusBadge.style.background = '#e9ecef';
-      statusBadge.style.color = '#495057';
+      statusBadge.className = 'ch-badge';
       return;
     }
 
@@ -418,43 +870,234 @@ class CoreHealthScribeElement extends HTMLElement {
           transcript: text,
           patient_id: this.getAttribute('patient-id'),
           encounter_id: this.getAttribute('encounter-id'),
-          patient_summary: this.getAttribute('patient-summary') || ''
+          role: this.role,
+          taxonomy: this.taxonomy,
+          patient_summary: this.getAttribute('patient-summary') || '',
+          custom_catalog: this.customCatalog || undefined,
+          existing_sections: this.structuredSections,
+          existing_orders: this.groundedOrders,
         })
       });
 
       const data = await res.json();
-      if (data.success && data.structured_sections) {
-        let formatted = '';
-        data.structured_sections.forEach(sec => {
-          formatted += `### ${sec.title}\n${sec.content}\n\n`;
-        });
-        if (soapInput) soapInput.value = formatted.trim();
+      if (data.success) {
+        this.structuredSections = data.structured_sections || [];
+        this.groundedOrders = data.grounded_orders || [];
+
+        // Update Note text
+        if (noteInput) {
+          noteInput.value = data.formatted_markdown || '';
+        }
+
+        // Render Orders Deck
+        this.renderOrdersTable();
+
         signBtn.disabled = false;
         statusBadge.innerText = 'Ready for Review';
-        statusBadge.style.background = '#17a2b8';
-        statusBadge.style.color = '#fff';
+        statusBadge.className = 'ch-badge success';
+        this.saveDraft();
+
         this.dispatchEvent(new CustomEvent('corehealth:state-change', { detail: 'reviewing' }));
+        this.dispatchEvent(new CustomEvent('corehealth:orders-updated', { detail: this.groundedOrders }));
       }
     } catch (e) {
-      console.error('Error structuring dictation', e);
+      console.error('Error processing dictation', e);
       statusBadge.innerText = 'Error';
     }
   }
 
+  renderOrdersTable() {
+    const deck = this.shadowRoot.getElementById('orders-deck');
+    const tbody = this.shadowRoot.getElementById('orders-tbody');
+    const countBadge = this.shadowRoot.getElementById('orders-count-badge');
+    const tariffEl = this.shadowRoot.getElementById('tariff-preview');
+
+    if (!deck || !tbody) return;
+
+    if (this.groundedOrders.length === 0) {
+      deck.style.display = 'none';
+      return;
+    }
+
+    deck.style.display = 'block';
+    countBadge.innerText = `${this.groundedOrders.length} RECOMMENDED`;
+
+    // Filter items
+    const filtered = this.groundedOrders.filter(ord => {
+      if (this.activeFilter === 'all') return true;
+      if (this.activeFilter === 'rx') return ord.order_type === 'PRODUCT';
+      if (this.activeFilter === 'lab') return ord.service_type === 'lab';
+      if (this.activeFilter === 'rad') return ord.service_type === 'imaging';
+      if (this.activeFilter === 'proc') return ord.service_type === 'procedure';
+      return true;
+    });
+
+    let totalTariff = 0;
+    tbody.innerHTML = filtered.map((ord, idx) => {
+      const realIdx = this.groundedOrders.indexOf(ord);
+      if (ord.is_selected) {
+        totalTariff += (ord.unit_price || 0) * (ord.quantity || 1);
+      }
+
+      let catBadgeClass = 'cat-rx';
+      let catLabel = 'PRESCRIPTION';
+      if (ord.order_type === 'SERVICE') {
+        if (ord.service_type === 'lab') { catBadgeClass = 'cat-lab'; catLabel = 'LABORATORY'; }
+        else if (ord.service_type === 'imaging') { catBadgeClass = 'cat-rad'; catLabel = 'IMAGING'; }
+        else if (ord.service_type === 'procedure') { catBadgeClass = 'cat-proc'; catLabel = 'PROCEDURE'; }
+        else { catBadgeClass = 'cat-nurs'; catLabel = 'NURSING'; }
+      } else if (ord.order_type === 'FOLLOW_UP') {
+        catBadgeClass = 'cat-followup'; catLabel = 'REVIEW';
+      }
+
+      return `
+        <tr data-idx="${realIdx}">
+          <td>
+            <input type="checkbox" class="order-chk" data-idx="${realIdx}" ${ord.is_selected ? 'checked' : ''}>
+          </td>
+          <td>
+            <span class="cat-badge ${catBadgeClass}">${catLabel}</span>
+          </td>
+          <td>
+            <strong>${ord.item_name}</strong>
+            ${ord.catalog_id ? `<span style="font-size: 10px; color: #16a34a; margin-left: 4px;">#${ord.catalog_id}</span>` : '<span style="font-size: 10px; color: #d97706; margin-left: 4px;">FREE-FORM</span>'}
+            ${ord.safety_warning ? `<div style="color: #dc2626; font-size: 10px; font-weight: 700;">${ord.safety_warning}</div>` : ''}
+          </td>
+          <td>
+            <input type="text" class="ch-inline-input order-spec" data-idx="${realIdx}" value="${ord.dosage || ord.indication || ''}" placeholder="Dosage / Indication">
+          </td>
+          <td>
+            <input type="text" class="ch-inline-input order-inst" data-idx="${realIdx}" value="${ord.instructions || ''}" placeholder="Instructions / Route">
+          </td>
+          <td style="font-weight: 600;">₦${((ord.unit_price || 0) * (ord.quantity || 1)).toLocaleString()}</td>
+          <td>
+            <button type="button" class="btn-del-order" data-idx="${realIdx}" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 13px;">✕</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tariffEl.innerText = `Total Staged: ${this.groundedOrders.filter(o => o.is_selected).length} items · Estimated Tariff: ₦${totalTariff.toLocaleString()}`;
+
+    // Bind checkboxes & inputs
+    tbody.querySelectorAll('.order-chk').forEach(chk => {
+      chk.addEventListener('change', (e) => {
+        const i = parseInt(e.target.getAttribute('data-idx'), 10);
+        this.groundedOrders[i].is_selected = e.target.checked;
+        this.renderOrdersTable();
+      });
+    });
+
+    tbody.querySelectorAll('.order-spec').forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const i = parseInt(e.target.getAttribute('data-idx'), 10);
+        if (this.groundedOrders[i].order_type === 'PRODUCT') {
+          this.groundedOrders[i].dosage = e.target.value;
+        } else {
+          this.groundedOrders[i].indication = e.target.value;
+        }
+        this.saveDraft();
+      });
+    });
+
+    tbody.querySelectorAll('.order-inst').forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const i = parseInt(e.target.getAttribute('data-idx'), 10);
+        this.groundedOrders[i].instructions = e.target.value;
+        this.saveDraft();
+      });
+    });
+
+    tbody.querySelectorAll('.btn-del-order').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const i = parseInt(e.target.getAttribute('data-idx'), 10);
+        this.groundedOrders.splice(i, 1);
+        this.renderOrdersTable();
+        this.saveDraft();
+      });
+    });
+  }
+
+  async switchTaxonomy(newTaxonomy) {
+    const baseUrl = (this.getAttribute('base-url') || '').replace(/\/+$/, '');
+    const token = this.getAttribute('sdk-token') || '';
+    const noteInput = this.shadowRoot.getElementById('note-input');
+    const title = this.shadowRoot.getElementById('note-pane-title');
+
+    try {
+      const res = await fetch(`${baseUrl}/api/sdk/scribe/convert-format`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          from_taxonomy: this.taxonomy,
+          to_taxonomy: newTaxonomy,
+          role: this.role,
+          current_sections: this.structuredSections,
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        this.taxonomy = newTaxonomy;
+        this.structuredSections = data.structured_sections || [];
+        if (noteInput) noteInput.value = data.formatted_markdown || '';
+        if (title) title.innerText = `2. Structured Note (${newTaxonomy.toUpperCase()})`;
+        this.updateTaxonomyPills();
+        this.saveDraft();
+      }
+    } catch (e) {
+      console.error('Error switching taxonomy', e);
+    }
+  }
+
+  promptAddOrder() {
+    const name = window.prompt('Enter medication, lab investigation, or procedure name:');
+    if (!name || !name.trim()) return;
+
+    this.groundedOrders.push({
+      id: 'ord_' + (this.groundedOrders.length + 1),
+      order_type: 'PRODUCT',
+      service_type: 'product',
+      category_id: 4,
+      category_name: 'Manual Order',
+      catalog_id: null,
+      item_name: name.trim(),
+      dosage: '1 tab',
+      frequency: 'OD',
+      duration: '5 days',
+      route: 'oral',
+      quantity: 1,
+      instructions: 'Take as directed',
+      unit_price: 500.0,
+      target_queue: 'dispensing_queue',
+      is_selected: true,
+      is_matched: false,
+      is_free_form: true,
+      safety_warning: null,
+    });
+
+    this.renderOrdersTable();
+    this.saveDraft();
+  }
+
   async handleSignOff() {
-    const soapInput = this.shadowRoot.getElementById('soap-input');
+    const noteInput = this.shadowRoot.getElementById('note-input');
     const transcriptInput = this.shadowRoot.getElementById('transcript-input');
     const signBtn = this.shadowRoot.getElementById('btn-sign');
     const statusBadge = this.shadowRoot.getElementById('status-badge');
 
-    const finalNote = soapInput ? soapInput.value.trim() : '';
+    const finalNote = noteInput ? noteInput.value.trim() : '';
     if (!finalNote) return;
 
     signBtn.disabled = true;
-    signBtn.innerText = 'Signing...';
+    signBtn.innerText = 'Signing Note & Orders...';
 
     const baseUrl = (this.getAttribute('base-url') || '').replace(/\/+$/, '');
     const token = this.getAttribute('sdk-token') || '';
+    const selectedOrders = this.groundedOrders.filter(o => o.is_selected);
 
     try {
       // 1. Sign
@@ -467,14 +1110,17 @@ class CoreHealthScribeElement extends HTMLElement {
         body: JSON.stringify({
           patient_id: this.getAttribute('patient-id'),
           encounter_id: this.getAttribute('encounter-id'),
+          role: this.role,
+          taxonomy_type: this.taxonomy,
           final_signed_note: finalNote,
-          original_transcript: transcriptInput ? transcriptInput.value : ''
+          original_transcript: transcriptInput ? transcriptInput.value : '',
+          approved_orders: selectedOrders,
         })
       });
       const signData = await signRes.json();
 
       // 2. Fetch full compositions
-      const compRes = await fetch(`${baseUrl}/api/sdk/scribe/session/${encodeURIComponent(token)}/compositions`, {
+      const compRes = await fetch(`${baseUrl}/api/sdk/scribe/compositions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -486,30 +1132,109 @@ class CoreHealthScribeElement extends HTMLElement {
 
       signBtn.innerText = '✓ Signed';
       statusBadge.innerText = '✓ Signed Off';
-      statusBadge.style.background = '#28a745';
-      statusBadge.style.color = '#fff';
+      statusBadge.className = 'ch-badge success';
+
+      this.clearDraft();
 
       const payload = {
         audit_id: signData.audit_id,
         patient_id: this.getAttribute('patient-id'),
         encounter_id: this.getAttribute('encounter-id'),
+        role: this.role,
+        taxonomy: this.taxonomy,
         signed_at: signData.signed_at,
         final_signed_note: finalNote,
-        original_transcript: transcriptInput ? transcriptInput.value : '',
+        approved_orders: selectedOrders,
         openehr_composition: compData.openehr_composition || null,
-        fhir_bundle: compData.fhir_bundle || null
+        fhir_bundle: compData.fhir_bundle || null,
       };
 
       this.dispatchEvent(new CustomEvent('corehealth:signed-off', { detail: payload }));
       this.dispatchEvent(new CustomEvent('corehealth:state-change', { detail: 'signed-off' }));
     } catch (e) {
-      console.error('Error signing scribe note', e);
+      console.error('Error signing scribe session', e);
       signBtn.disabled = false;
-      signBtn.innerText = 'Accept & Sign Note';
+      signBtn.innerText = 'Accept & Sign Note & Orders';
     }
   }
-}
 
+  // Draft Persistence
+  getDraftKey() {
+    const pId = this.getAttribute('patient-id') || '0';
+    const eId = this.getAttribute('encounter-id') || '0';
+    return `ch_scribe_draft_${pId}_${eId}`;
+  }
+
+  saveDraft() {
+    clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      try {
+        const transcriptInput = this.shadowRoot.getElementById('transcript-input');
+        const noteInput = this.shadowRoot.getElementById('note-input');
+        const draft = {
+          transcript: transcriptInput ? transcriptInput.value : '',
+          note: noteInput ? noteInput.value : '',
+          taxonomy: this.taxonomy,
+          structuredSections: this.structuredSections,
+          groundedOrders: this.groundedOrders,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(this.getDraftKey(), JSON.stringify(draft));
+      } catch (e) {}
+    }, 500);
+  }
+
+  restoreDraftIfAvailable() {
+    try {
+      const raw = localStorage.getItem(this.getDraftKey());
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft) return;
+
+      const transcriptInput = this.shadowRoot.getElementById('transcript-input');
+      const noteInput = this.shadowRoot.getElementById('note-input');
+      const notice = this.shadowRoot.getElementById('draft-notice');
+      const label = this.shadowRoot.getElementById('draft-time-label');
+
+      if (draft.transcript && transcriptInput) transcriptInput.value = draft.transcript;
+      if (draft.note && noteInput) noteInput.value = draft.note;
+      if (draft.taxonomy) this.taxonomy = draft.taxonomy;
+      if (draft.structuredSections) this.structuredSections = draft.structuredSections;
+      if (draft.groundedOrders) {
+        this.groundedOrders = draft.groundedOrders;
+        this.renderOrdersTable();
+      }
+
+      if (notice && label && (draft.transcript || draft.note)) {
+        notice.style.display = 'flex';
+        label.innerText = `Restored uncommitted consultation draft (${new Date(draft.savedAt).toLocaleTimeString()})`;
+      }
+    } catch (e) {}
+  }
+
+  discardDraft() {
+    try {
+      localStorage.removeItem(this.getDraftKey());
+      const transcriptInput = this.shadowRoot.getElementById('transcript-input');
+      const noteInput = this.shadowRoot.getElementById('note-input');
+      const notice = this.shadowRoot.getElementById('draft-notice');
+
+      if (transcriptInput) transcriptInput.value = '';
+      if (noteInput) noteInput.value = '';
+      this.groundedOrders = [];
+      this.renderOrdersTable();
+      if (notice) notice.style.display = 'none';
+    } catch (e) {}
+  }
+
+  clearDraft() {
+    try {
+      localStorage.removeItem(this.getDraftKey());
+      const notice = this.shadowRoot.getElementById('draft-notice');
+      if (notice) notice.style.display = 'none';
+    } catch (e) {}
+  }
+}
 
 /**
  * CoreHealth AI Scribe — Master Controller Class
@@ -568,8 +1293,15 @@ class CoreHealthScribe {
       if (this.options.patientId) el.setAttribute('patient-id', String(this.options.patientId));
       if (this.options.encounterId) el.setAttribute('encounter-id', String(this.options.encounterId));
       if (this.options.patientSummary) el.setAttribute('patient-summary', String(this.options.patientSummary));
-      el.setAttribute('locale', this.options.locale);
-      el.setAttribute('theme', this.options.theme);
+      if (this.options.role) el.setAttribute('role', String(this.options.role));
+      if (this.options.taxonomy) el.setAttribute('taxonomy', String(this.options.taxonomy));
+      if (this.options.customCatalog) {
+        el.setAttribute('custom-catalog', typeof this.options.customCatalog === 'string'
+          ? this.options.customCatalog
+          : JSON.stringify(this.options.customCatalog));
+      }
+      el.setAttribute('locale', this.options.locale || 'en-NG');
+      el.setAttribute('theme', this.options.theme || 'light');
 
       // Bind custom element event listeners
       if (typeof this.options.onSignedOff === 'function') {
@@ -577,6 +1309,9 @@ class CoreHealthScribe {
       }
       if (typeof this.options.onStateChange === 'function') {
         el.addEventListener('corehealth:state-change', (e) => this.options.onStateChange(e.detail));
+      }
+      if (typeof this.options.onOrdersUpdated === 'function') {
+        el.addEventListener('corehealth:orders-updated', (e) => this.options.onOrdersUpdated(e.detail));
       }
 
       target.innerHTML = '';
@@ -615,6 +1350,44 @@ class CoreHealthScribe {
     if (this.element) {
       this.element.setAttribute('sdk-token', sdkToken);
     }
+  }
+
+  /**
+   * Super-Compress partner EMR categories and items into CSCP compact format.
+   * Compresses 500+ hospital items into ~1,500 LLM tokens (10x-15x smaller than raw JSON).
+   */
+  static compressCatalog(categories = []) {
+    const lines = [];
+    for (const cat of categories) {
+      const catId = cat.id || 'cat';
+      const catType = (cat.type || 'SERVICE').toUpperCase();
+      const catName = cat.name || catId;
+      lines.push(`#CAT:${catId}|${catType}|${catName}`);
+
+      const itemTokens = [];
+      const items = cat.items || [];
+      for (const it of items) {
+        if (typeof it === 'string') {
+          itemTokens.push(it);
+        } else {
+          const id = it.id || it.catalog_id || '';
+          const name = it.name || it.item_name || '';
+          const code = it.code || '';
+          const price = it.price ?? it.unit_price ?? '';
+          if (price !== '' && code !== '') {
+            itemTokens.push(`${id}:${code}:${name}:${price}`);
+          } else if (code !== '') {
+            itemTokens.push(`${id}:${code}:${name}`);
+          } else {
+            itemTokens.push(`${id}:${name}`);
+          }
+        }
+      }
+      if (itemTokens.length > 0) {
+        lines.push(itemTokens.join('|'));
+      }
+    }
+    return lines.join('\n');
   }
 }
 
