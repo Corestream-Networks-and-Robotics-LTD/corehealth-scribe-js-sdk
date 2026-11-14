@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,6 +19,7 @@
       --text-muted: #64748b;
       --radius: 8px;
     }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
@@ -25,10 +27,12 @@
       margin: 0;
       padding: 24px;
     }
+
     .container {
       max-width: 1040px;
       margin: 0 auto;
     }
+
     header {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -38,8 +42,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
+
     .patient-pill {
       background: #e0f2fe;
       color: #0369a1;
@@ -48,14 +53,16 @@
       font-size: 13px;
       font-weight: 600;
     }
+
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 20px;
       margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
+
     .tabs {
       display: flex;
       gap: 8px;
@@ -63,6 +70,7 @@
       border-bottom: 1px solid var(--border);
       padding-bottom: 8px;
     }
+
     .tab-btn {
       background: none;
       border: none;
@@ -74,10 +82,12 @@
       border-radius: 6px;
       transition: all 0.15s ease;
     }
+
     .tab-btn.active {
       background: var(--primary);
       color: #fff;
     }
+
     .status-bar {
       display: flex;
       align-items: center;
@@ -89,18 +99,33 @@
       margin-bottom: 16px;
       font-size: 13px;
     }
+
     .dot {
       width: 10px;
       height: 10px;
       border-radius: 50%;
       background: #94a3b8;
     }
-    .dot.active { background: #22c55e; }
-    .dot.recording { background: #ef4444; animation: blink 1s infinite; }
-    @keyframes blink { 50% { opacity: 0.3; } }
+
+    .dot.active {
+      background: #22c55e;
+    }
+
+    .dot.recording {
+      background: #ef4444;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: 0.3;
+      }
+    }
+
     #scribe-mount {
       min-height: 440px;
     }
+
     pre {
       background: #0f172a;
       color: #38bdf8;
@@ -108,10 +133,204 @@
       border-radius: 8px;
       font-size: 12px;
       overflow-x: auto;
-      max-height: 380px;
+      max-height: 420px;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    /* Tabbed Results Viewer Styles */
+    .res-tabs {
+      display: flex;
+      gap: 6px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0;
+      margin-bottom: 16px;
+    }
+
+    .res-tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .res-tab-btn:hover {
+      color: var(--primary);
+    }
+
+    .res-tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .res-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    .res-tab-btn.active .res-badge {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .fmt-toggle {
+      display: inline-flex;
+      background: #e2e8f0;
+      padding: 2px;
+      border-radius: 6px;
+      gap: 2px;
+    }
+
+    .fmt-btn {
+      border: none;
+      background: none;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #475569;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .fmt-btn.active {
+      background: #ffffff;
+      color: #011b33;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+
+    .res-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .res-table th {
+      background: #f8fafc;
+      padding: 9px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #475569;
+      font-size: 11px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .res-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+
+    .res-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .kpi-card {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+
+    .kpi-card .kpi-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 3px;
+    }
+
+    .kpi-card .kpi-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: #011b33;
+    }
+
+    .note-preview-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      font-family: inherit;
+      color: #1e293b;
+      max-height: 280px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+
+    .res-raw-container {
+      position: relative;
+    }
+
+    .pill-res {
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .pill-res.blue {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .pill-res.purple {
+      background: #ede9fe;
+      color: #5b21b6;
+    }
+
+    .pill-res.green {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .pill-res.amber {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .pill-res.gray {
+      background: #f1f5f9;
+      color: #475569;
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <header>
@@ -127,21 +346,27 @@
 
     <div class="card">
       <div class="tabs">
-        <button id="tab-webcomponent" class="tab-btn active" onclick="switchTrack('web-component')">Track A: Web Component (Shadow DOM)</button>
-        <button id="tab-iframe" class="tab-btn" onclick="switchTrack('iframe')">Track B: Sandboxed iFrame (postMessage)</button>
+        <button id="tab-webcomponent" class="tab-btn active" onclick="switchTrack('web-component')">Track A: Web
+          Component (Shadow DOM)</button>
+        <button id="tab-iframe" class="tab-btn" onclick="switchTrack('iframe')">Track B: Sandboxed iFrame
+          (postMessage)</button>
       </div>
 
       <div class="status-bar">
         <span id="status-dot" class="dot active"></span>
         <strong id="status-label">SDK Initializing...</strong>
-        <span id="token-info" style="margin-left: auto; color: var(--text-muted); font-size: 12px;">Acquiring token from proxy...</span>
+        <span id="token-info" style="margin-left: auto; color: var(--text-muted); font-size: 12px;">Acquiring token from
+          proxy...</span>
       </div>
 
       <!-- Host EMR Integration & Configuration Bar -->
-      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px;">
+      <div
+        style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px;">
         <div style="display: flex; gap: 8px; align-items: center;">
-          <label for="role-select" style="font-size: 12px; font-weight: 600; color: #475569;">Specialty / Taxonomy:</label>
-          <select id="role-select" onchange="changeRole(this.value)" style="font-size: 12px; padding: 5px 10px; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; font-weight: 500;">
+          <label for="role-select" style="font-size: 12px; font-weight: 600; color: #475569;">Specialty /
+            Taxonomy:</label>
+          <select id="role-select" onchange="changeRole(this.value)"
+            style="font-size: 12px; padding: 5px 10px; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; font-weight: 500;">
             <option value="doctor" selected>Doctor (SOAP, Clerking, POMR)</option>
             <option value="nurse">Nurse (Focus DAR, SBAR, SOAPIE)</option>
             <option value="maternity">Maternity (ANC, Labor, PNC)</option>
@@ -149,20 +374,46 @@
         </div>
 
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <button type="button" id="demo-load-sample" class="tab-btn" style="display: inline-flex; align-items: center; gap: 5px; background: #ffffff; border: 1px solid #cbd5e1; color: #011b33; padding: 5px 10px; font-size: 11px;" onclick="loadSampleText()" title="Simulate clinician dictation input">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <button type="button" id="demo-load-sample" class="tab-btn"
+            style="display: inline-flex; align-items: center; gap: 5px; background: #ffffff; border: 1px solid #cbd5e1; color: #011b33; padding: 5px 10px; font-size: 11px;"
+            onclick="loadSampleText()" title="Simulate clinician dictation input">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
             <span>Simulate Sample</span>
           </button>
-          <button type="button" id="demo-process-note" class="tab-btn" style="display: inline-flex; align-items: center; gap: 5px; background: #0284c7; color: #ffffff; padding: 5px 10px; font-size: 11px;" onclick="triggerProcess()" title="Trigger structuring pipeline">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <button type="button" id="demo-process-note" class="tab-btn"
+            style="display: inline-flex; align-items: center; gap: 5px; background: #0284c7; color: #ffffff; padding: 5px 10px; font-size: 11px;"
+            onclick="triggerProcess()" title="Trigger structuring pipeline">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
             <span>Process</span>
           </button>
-          <button type="button" id="demo-clear" class="tab-btn" style="display: inline-flex; align-items: center; gap: 4px; background: #ffffff; border: 1px solid #cbd5e1; color: #dc2626; padding: 5px 8px; font-size: 11px;" onclick="clearScribe()" title="Reset session state">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          <button type="button" id="demo-clear" class="tab-btn"
+            style="display: inline-flex; align-items: center; gap: 4px; background: #ffffff; border: 1px solid #cbd5e1; color: #dc2626; padding: 5px 8px; font-size: 11px;"
+            onclick="clearScribe()" title="Reset session state">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </svg>
             <span>Clear</span>
           </button>
-          <button type="button" id="demo-fetch-direct" class="tab-btn" style="display: inline-flex; align-items: center; gap: 5px; background: #011b33; color: #ffffff; padding: 5px 10px; font-size: 11px;" onclick="fetchDirectCompositions()" title="Demonstrate direct REST API compositions handoff">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          <button type="button" id="demo-fetch-direct" class="tab-btn"
+            style="display: inline-flex; align-items: center; gap: 5px; background: #011b33; color: #ffffff; padding: 5px 10px; font-size: 11px;"
+            onclick="fetchDirectCompositions()" title="Demonstrate direct REST API compositions handoff">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <polyline points="9 12 11 14 15 10" />
+            </svg>
             <span>EHR Compositions Query</span>
           </button>
         </div>
@@ -172,14 +423,113 @@
       <div id="scribe-mount"></div>
     </div>
 
+    <!-- Tabbed Clinical Standards & Orders Results Viewer -->
     <div id="results-card" class="card" style="display: none;">
-      <h3 style="margin-top: 0; font-size: 16px; color: var(--primary);">
-        ✓ Signed Clinical Data Received by Partner Backend (openEHR & FHIR R4)
-      </h3>
-      <p style="font-size: 13px; color: var(--text-muted);">
-        The AI Scribe SDK automatically generated and returned this standards-compliant payload:
-      </p>
-      <pre id="json-viewer"></pre>
+      <!-- Results Card Header -->
+      <div
+        style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <div>
+          <h3 style="margin: 0; font-size: 16px; color: var(--primary); display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <polyline points="9 12 11 14 15 10" />
+            </svg>
+            <span>Signed Clinical Data Received by Partner Backend</span>
+          </h3>
+          <span style="font-size: 12px; color: var(--text-muted);">
+            Dual-standard openEHR COMPOSITION.encounter.v1 & HL7 FHIR R4 Transaction Bundle
+          </span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <!-- Format Toggle: Tabulated vs Raw JSON -->
+          <div class="fmt-toggle">
+            <button type="button" id="btn-fmt-tabulated" class="fmt-btn active"
+              onclick="switchResultsFormat('tabulated')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M3 9h18" />
+                <path d="M9 21V9" />
+              </svg>
+              <span>Tabulated View</span>
+            </button>
+            <button type="button" id="btn-fmt-raw" class="fmt-btn" onclick="switchResultsFormat('raw')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6" />
+                <polyline points="8 6 2 12 8 18" />
+              </svg>
+              <span>Raw JSON</span>
+            </button>
+          </div>
+
+          <!-- Quick Copy Payload -->
+          <button type="button" class="tab-btn"
+            style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; border: 1px solid #cbd5e1; color: #011b33; padding: 5px 10px; font-size: 11px;"
+            onclick="copyActivePayload()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+            </svg>
+            <span id="copy-payload-text">Copy JSON</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="res-tabs">
+        <button type="button" id="tab-res-all" class="res-tab-btn active" onclick="switchResultsTab('all')">
+          <span>All Overview</span>
+          <span class="res-badge" id="badge-res-all">Summary</span>
+        </button>
+        <button type="button" id="tab-res-fhir" class="res-tab-btn" onclick="switchResultsTab('fhir')">
+          <span>HL7 FHIR R4</span>
+          <span class="res-badge" id="badge-res-fhir">0 entries</span>
+        </button>
+        <button type="button" id="tab-res-openehr" class="res-tab-btn" onclick="switchResultsTab('openehr')">
+          <span>openEHR COMPOSITION</span>
+          <span class="res-badge" id="badge-res-openehr">encounter.v1</span>
+        </button>
+        <button type="button" id="tab-res-orders" class="res-tab-btn" onclick="switchResultsTab('orders')">
+          <span>Clinical Orders</span>
+          <span class="res-badge" id="badge-res-orders">0 orders</span>
+        </button>
+      </div>
+
+      <!-- Tab Panes Container -->
+      <div id="results-panes">
+        <!-- Tab 1: All Pane -->
+        <div id="pane-res-all" class="res-pane">
+          <div id="tabulated-res-all"></div>
+          <div id="raw-res-all" class="res-raw-container" style="display: none;">
+            <pre><code id="code-res-all"></code></pre>
+          </div>
+        </div>
+
+        <!-- Tab 2: FHIR R4 Pane -->
+        <div id="pane-res-fhir" class="res-pane" style="display: none;">
+          <div id="tabulated-res-fhir"></div>
+          <div id="raw-res-fhir" class="res-raw-container" style="display: none;">
+            <pre><code id="code-res-fhir"></code></pre>
+          </div>
+        </div>
+
+        <!-- Tab 3: openEHR Pane -->
+        <div id="pane-res-openehr" class="res-pane" style="display: none;">
+          <div id="tabulated-res-openehr"></div>
+          <div id="raw-res-openehr" class="res-raw-container" style="display: none;">
+            <pre><code id="code-res-openehr"></code></pre>
+          </div>
+        </div>
+
+        <!-- Tab 4: Orders Pane -->
+        <div id="pane-res-orders" class="res-pane" style="display: none;">
+          <div id="tabulated-res-orders"></div>
+          <div id="raw-res-orders" class="res-raw-container" style="display: none;">
+            <pre><code id="code-res-orders"></code></pre>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -323,11 +673,413 @@
       mountScribe(track);
     }
 
+    let latestResultsData = null;
+    let activeResultsTab = 'all';
+    let activeResultsFormat = 'tabulated';
+
+    function switchResultsTab(tab) {
+      activeResultsTab = tab;
+      ['all', 'fhir', 'openehr', 'orders'].forEach(t => {
+        const btn = document.getElementById(`tab-res-${t}`);
+        const pane = document.getElementById(`pane-res-${t}`);
+        if (btn) btn.classList.toggle('active', t === tab);
+        if (pane) pane.style.display = t === tab ? 'block' : 'none';
+      });
+      applyResultsFormat();
+    }
+
+    function switchResultsFormat(fmt) {
+      activeResultsFormat = fmt;
+      const btnTab = document.getElementById('btn-fmt-tabulated');
+      const btnRaw = document.getElementById('btn-fmt-raw');
+      if (btnTab) btnTab.classList.toggle('active', fmt === 'tabulated');
+      if (btnRaw) btnRaw.classList.toggle('active', fmt === 'raw');
+      applyResultsFormat();
+    }
+
+    function applyResultsFormat() {
+      ['all', 'fhir', 'openehr', 'orders'].forEach(t => {
+        const tabEl = document.getElementById(`tabulated-res-${t}`);
+        const rawEl = document.getElementById(`raw-res-${t}`);
+        if (tabEl) tabEl.style.display = activeResultsFormat === 'tabulated' ? 'block' : 'none';
+        if (rawEl) rawEl.style.display = activeResultsFormat === 'raw' ? 'block' : 'none';
+      });
+    }
+
+    async function copyActivePayload() {
+      if (!latestResultsData) return;
+      let textToCopy = '';
+      if (activeResultsTab === 'all') {
+        textToCopy = JSON.stringify(latestResultsData, null, 2);
+      } else if (activeResultsTab === 'fhir') {
+        textToCopy = JSON.stringify(latestResultsData.fhir_bundle || {}, null, 2);
+      } else if (activeResultsTab === 'openehr') {
+        textToCopy = JSON.stringify(latestResultsData.openehr_composition || {}, null, 2);
+      } else if (activeResultsTab === 'orders') {
+        textToCopy = JSON.stringify(latestResultsData.approved_orders || latestResultsData.grounded_orders || [], null, 2);
+      }
+
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+        const txt = document.getElementById('copy-payload-text');
+        if (txt) {
+          txt.innerText = 'Copied!';
+          setTimeout(() => { txt.innerText = 'Copy JSON'; }, 1500);
+        }
+      } catch (err) {
+        console.warn('Copy error', err);
+      }
+    }
+
+    function renderAllTabulated(data) {
+      const orders = data.approved_orders || data.grounded_orders || [];
+      const fhirEntries = (data.fhir_bundle && data.fhir_bundle.entry) || [];
+      const openehrContent = (data.openehr_composition && data.openehr_composition.content) || [];
+      let totalTariff = 0;
+      orders.forEach(o => { totalTariff += (Number(o.unit_price) || 0) * (Number(o.quantity) || 1); });
+
+      const auditId = data.audit_id ? `#${data.audit_id}` : '#26';
+      const timestamp = data.persisted_at ? new Date(data.persisted_at).toLocaleString() : new Date().toLocaleString();
+      const signedNote = data.final_signed_note || data.formatted_markdown || 'No clinical note content present.';
+
+      return `
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Patient & Encounter</div>
+            <div class="kpi-val" style="font-size: 13px;">Patient #${data.patient_id || 492} · Enc #${data.encounter_id || 1017}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Persisted Timestamp</div>
+            <div class="kpi-val" style="font-size: 13px;">${timestamp}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Audit Record & Status</div>
+            <div class="kpi-val" style="font-size: 13px; color: #16a34a;">Audit ${auditId} · Verified</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Clinical Orders & Tariff</div>
+            <div class="kpi-val" style="font-size: 13px;">${orders.length} items (₦${totalTariff.toLocaleString()})</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+          <strong style="font-size: 12px; color: var(--primary); text-transform: uppercase;">Accepted & Signed Clinical Note</strong>
+          <span style="font-size: 11px; color: var(--text-muted);">${signedNote.split(/\s+/).filter(Boolean).length} words</span>
+        </div>
+        <div class="note-preview-box">${escapeHtml(signedNote)}</div>
+
+        <div style="margin-bottom: 8px;">
+          <strong style="font-size: 12px; color: var(--primary); text-transform: uppercase;">Standards Conformance & Interoperability Summary</strong>
+        </div>
+        <table class="res-table">
+          <thead>
+            <tr>
+              <th style="width: 140px;">Standard</th>
+              <th style="width: 200px;">Canonical Artifact</th>
+              <th>Artifact Description</th>
+              <th style="width: 120px;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="pill-res purple">openEHR</span></td>
+              <td><code>COMPOSITION.encounter.v1</code></td>
+              <td>Clinical consultation summary containing ${openehrContent.length} structured archetypes (Vitals, Assessment, Instructions)</td>
+              <td><span class="pill-res green">Valid openEHR</span></td>
+            </tr>
+            <tr>
+              <td><span class="pill-res blue">HL7 FHIR R4</span></td>
+              <td><code>Bundle (transaction)</code></td>
+              <td>Transaction bundle with ${fhirEntries.length} resources (Encounter, Condition, MedicationRequest, ServiceRequest)</td>
+              <td><span class="pill-res green">Valid FHIR R4</span></td>
+            </tr>
+            <tr>
+              <td><span class="pill-res amber">Statutory</span></td>
+              <td><code>NDPA 2023 Statutory Privacy</code></td>
+              <td>Patient affirmative consent enforced, PII sanitized via deterministic pseudonymization</td>
+              <td><span class="pill-res green">Protected</span></td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderFhirTabulated(data) {
+      const bundle = data.fhir_bundle || {};
+      const entries = bundle.entry || [];
+
+      if (!entries.length) {
+        return `<div style="padding: 24px; text-align: center; color: var(--text-muted); background: #f8fafc; border-radius: 6px; border: 1px dashed var(--border);">No FHIR resources generated.</div>`;
+      }
+
+      let rowsHtml = '';
+      entries.forEach((e, idx) => {
+        const res = e.resource || {};
+        const rType = res.resourceType || 'Resource';
+        const rId = res.id || (e.fullUrl ? e.fullUrl.split('/').pop() : `res-${idx + 1}`);
+        const status = res.status || 'active';
+
+        let badgeClass = 'blue';
+        if (rType === 'MedicationRequest') badgeClass = 'purple';
+        else if (rType === 'ServiceRequest') badgeClass = 'amber';
+        else if (rType === 'Condition') badgeClass = 'amber';
+        else if (rType === 'Observation') badgeClass = 'green';
+
+        let concept = '-';
+        if (rType === 'MedicationRequest') {
+          concept = res.medicationCodeableConcept?.text || res.medicationCodeableConcept?.coding?.[0]?.display || res.medicationReference?.display || 'Medication Order';
+        } else if (rType === 'ServiceRequest') {
+          concept = res.code?.text || res.code?.coding?.[0]?.display || 'Clinical Diagnostic Service';
+        } else if (rType === 'Condition') {
+          concept = res.code?.text || res.code?.coding?.[0]?.display || 'Clinical Assessment';
+        } else if (rType === 'Observation') {
+          concept = res.code?.text || res.code?.coding?.[0]?.display || 'Observation Value';
+        } else if (rType === 'Encounter') {
+          concept = res.type?.[0]?.text || res.class?.display || 'Ambulatory Consultation';
+        }
+
+        const subject = res.subject?.reference || res.subject?.display || `Patient/${data.patient_id || 492}`;
+
+        let details = '-';
+        if (rType === 'MedicationRequest') {
+          details = res.dosageInstruction?.[0]?.text || (res.dosageInstruction?.[0]?.doseAndRate ? 'Standard dosing' : 'Take as directed');
+        } else if (rType === 'ServiceRequest') {
+          details = res.note?.[0]?.text || res.priority || 'Standard protocol';
+        } else if (rType === 'Observation') {
+          details = res.valueQuantity ? `${res.valueQuantity.value} ${res.valueQuantity.unit || ''}` : (res.valueString || '-');
+        } else if (rType === 'Encounter') {
+          details = res.period?.start ? `Started: ${new Date(res.period.start).toLocaleTimeString()}` : 'Encounter finished';
+        }
+
+        rowsHtml += `
+          <tr>
+            <td><span class="pill-res ${badgeClass}">${rType}</span></td>
+            <td><code>${rId}</code></td>
+            <td><span class="pill-res ${status === 'active' || status === 'finished' ? 'green' : 'gray'}">${status}</span></td>
+            <td><strong>${escapeHtml(concept)}</strong></td>
+            <td><code>${escapeHtml(subject)}</code></td>
+            <td>${escapeHtml(details)}</td>
+          </tr>
+        `;
+      });
+
+      return `
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted);">
+          <span>Bundle Type: <strong>${bundle.type || 'transaction'}</strong> · Resources: <strong>${entries.length}</strong></span>
+          <span>Target Standard: <strong>HL7 FHIR Release 4 (R4)</strong></span>
+        </div>
+        <table class="res-table">
+          <thead>
+            <tr>
+              <th style="width: 130px;">Resource Type</th>
+              <th style="width: 140px;">Resource ID</th>
+              <th style="width: 90px;">Status</th>
+              <th>Clinical Concept / Name</th>
+              <th style="width: 120px;">Subject</th>
+              <th>Clinical Instructions / Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderOpenEhrTabulated(data) {
+      const comp = data.openehr_composition || {};
+      const content = comp.content || [];
+      const archetypeId = comp.archetype_details?.archetype_id?.value || comp.archetype_node_id || 'openEHR-EHR-COMPOSITION.encounter.v1';
+      const compName = comp.name?.value || 'AI Scribe Consultation Summary';
+      const composer = comp.composer?.name || 'Dr. Chukwuemeka Obi';
+      const category = comp.category?.value || 'event (433)';
+
+      let rowsHtml = '';
+      if (content.length > 0) {
+        content.forEach((item, idx) => {
+          const type = item._type || 'ENTRY';
+          const nodeId = item.archetype_node_id || `openEHR-EHR-${type}.item_${idx + 1}.v1`;
+          const concept = item.name?.value || nodeId.split('.')[1] || type;
+
+          let badgeClass = 'blue';
+          if (type === 'OBSERVATION') badgeClass = 'green';
+          else if (type === 'INSTRUCTION') badgeClass = 'purple';
+          else if (type === 'EVALUATION') badgeClass = 'amber';
+
+          let dataSummary = '';
+          if (item.data) {
+            if (typeof item.data === 'object') {
+              dataSummary = Object.entries(item.data).map(([k, v]) => `${k}: ${v}`).join(', ');
+            } else {
+              dataSummary = String(item.data);
+            }
+          } else if (item.activities && item.activities[0]) {
+            const act = item.activities[0];
+            dataSummary = `${act.medicine || 'Medication'} · ${act.dose || ''} · ${act.route || ''}`;
+          } else {
+            dataSummary = 'Structured clinical narrative recorded';
+          }
+
+          rowsHtml += `
+            <tr>
+              <td><code>${escapeHtml(nodeId)}</code></td>
+              <td><span class="pill-res ${badgeClass}">${type}</span></td>
+              <td><strong>${escapeHtml(concept)}</strong></td>
+              <td>${escapeHtml(dataSummary)}</td>
+            </tr>
+          `;
+        });
+      } else {
+        rowsHtml = `
+          <tr>
+            <td><code>openEHR-EHR-SECTION.clinical_summary.v1</code></td>
+            <td><span class="pill-res green">OBSERVATION</span></td>
+            <td><strong>Consultation Narrative</strong></td>
+            <td>Complete clinical clerking transcribed and structured into SOAP/Clerking archetype hierarchy</td>
+          </tr>
+        `;
+      }
+
+      return `
+        <div class="kpi-grid" style="margin-bottom: 14px;">
+          <div class="kpi-card">
+            <div class="kpi-label">Archetype ID</div>
+            <div class="kpi-val" style="font-size: 12px; font-family: monospace;">${escapeHtml(archetypeId)}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Composition Name</div>
+            <div class="kpi-val" style="font-size: 13px;">${escapeHtml(compName)}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Category & Lifecycle</div>
+            <div class="kpi-val" style="font-size: 13px;">${escapeHtml(category)} · completed</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Composer (Attending)</div>
+            <div class="kpi-val" style="font-size: 13px;">${escapeHtml(composer)}</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 8px;">
+          <strong style="font-size: 12px; color: var(--primary); text-transform: uppercase;">Archetype Content Entries</strong>
+        </div>
+        <table class="res-table">
+          <thead>
+            <tr>
+              <th style="width: 280px;">Archetype Node ID</th>
+              <th style="width: 120px;">RM Type</th>
+              <th style="width: 180px;">Clinical Concept</th>
+              <th>Structured Clinical Values</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderOrdersTabulated(data) {
+      const orders = data.approved_orders || data.grounded_orders || [];
+      if (!orders.length) {
+        return `<div style="padding: 24px; text-align: center; color: var(--text-muted); background: #f8fafc; border-radius: 6px; border: 1px dashed var(--border);">No orders were approved or staged.</div>`;
+      }
+
+      let totalTariff = 0;
+      let rowsHtml = '';
+      orders.forEach((ord, idx) => {
+        const isProduct = ord.order_type === 'PRODUCT';
+        const cat = ord.category_name || (isProduct ? 'Prescription' : (ord.service_type || 'Investigation').toUpperCase());
+        const tariff = (Number(ord.unit_price) || 0) * (Number(ord.quantity) || 1);
+        totalTariff += tariff;
+
+        let badgeClass = 'blue';
+        if (cat.toLowerCase().includes('presc') || isProduct) badgeClass = 'blue';
+        else if (cat.toLowerCase().includes('lab')) badgeClass = 'purple';
+        else if (cat.toLowerCase().includes('imag') || cat.toLowerCase().includes('rad')) badgeClass = 'amber';
+        else badgeClass = 'gray';
+
+        const queue = ord.target_queue || (isProduct ? 'dispensing_queue' : (cat.toLowerCase().includes('lab') ? 'laboratory_queue' : 'radiology_queue'));
+
+        rowsHtml += `
+          <tr>
+            <td><span class="pill-res ${badgeClass}">${escapeHtml(cat)}</span></td>
+            <td>
+              <strong>${escapeHtml(ord.item_name || 'Item')}</strong>
+              ${ord.catalog_id ? `<span style="font-size: 10px; color: #16a34a; margin-left: 4px;">#${ord.catalog_id}</span>` : '<span style="font-size: 10px; color: #d97706; margin-left: 4px;">CUSTOM</span>'}
+            </td>
+            <td>${escapeHtml(ord.dosage || ord.indication || '-')}</td>
+            <td>${escapeHtml(ord.instructions || ord.route || 'Standard protocol')}</td>
+            <td style="text-align: center;">${ord.quantity || 1}</td>
+            <td style="font-weight: 600;">₦${tariff.toLocaleString()}</td>
+            <td><code>${escapeHtml(queue)}</code></td>
+          </tr>
+        `;
+      });
+
+      return `
+        <table class="res-table">
+          <thead>
+            <tr>
+              <th style="width: 110px;">Category</th>
+              <th>Item Name & Code</th>
+              <th>Dosage / Indication</th>
+              <th>Instructions / Route</th>
+              <th style="width: 60px; text-align: center;">Qty</th>
+              <th style="width: 90px;">Tariff</th>
+              <th style="width: 140px;">Target Queue</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; font-size: 12px;">
+          <span>Total Approved Orders: <strong>${orders.length} items</strong></span>
+          <span style="font-weight: 700; color: #011b33;">Total Staged Tariff: ₦${totalTariff.toLocaleString()}</span>
+        </div>
+      `;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     function showResults(data) {
+      latestResultsData = data;
       const resultsCard = document.getElementById('results-card');
-      const jsonViewer = document.getElementById('json-viewer');
+
+      // Populate Tabulated Views
+      document.getElementById('tabulated-res-all').innerHTML = renderAllTabulated(data);
+      document.getElementById('tabulated-res-fhir').innerHTML = renderFhirTabulated(data);
+      document.getElementById('tabulated-res-openehr').innerHTML = renderOpenEhrTabulated(data);
+      document.getElementById('tabulated-res-orders').innerHTML = renderOrdersTabulated(data);
+
+      // Populate Raw Code Blocks
+      document.getElementById('code-res-all').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('code-res-fhir').textContent = JSON.stringify(data.fhir_bundle || {}, null, 2);
+      document.getElementById('code-res-openehr').textContent = JSON.stringify(data.openehr_composition || {}, null, 2);
+      document.getElementById('code-res-orders').textContent = JSON.stringify(data.approved_orders || data.grounded_orders || [], null, 2);
+
+      // Update Badges
+      const fhirEntries = (data.fhir_bundle && data.fhir_bundle.entry) || [];
+      const orders = data.approved_orders || data.grounded_orders || [];
+      const openehrContent = (data.openehr_composition && data.openehr_composition.content) || [];
+
+      document.getElementById('badge-res-fhir').innerText = `${fhirEntries.length} entries`;
+      document.getElementById('badge-res-openehr').innerText = `${openehrContent.length || 1} archetypes`;
+      document.getElementById('badge-res-orders').innerText = `${orders.length} orders`;
+
+      // Show card and apply active tab & format
       resultsCard.style.display = 'block';
-      jsonViewer.textContent = JSON.stringify(data, null, 2);
+      switchResultsTab(activeResultsTab);
+      switchResultsFormat(activeResultsFormat);
       resultsCard.scrollIntoView({ behavior: 'smooth' });
     }
 
@@ -438,4 +1190,5 @@
     window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
+
 </html>

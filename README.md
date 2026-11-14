@@ -36,10 +36,17 @@ The CoreHealth AI Scribe SDK allows healthcare platforms, hospital systems, and 
 A live, zero-dependency reference demo is included in `examples/vanilla-integration/`:
 
 ```bash
+# Navigate to the reference example
 cd examples/vanilla-integration
+
+# Copy environment configuration template
+cp .env.example .env
+
+# Start the local Node.js proxy server (Node 18+)
 node server.js
 ```
-Open `http://localhost:3001` in your browser to test dictation, structuring, and EHR persistence!
+
+Open `http://localhost:3001` in your browser to test dictation, structuring with `gemini-2.5-flash`, suggested order staging, and EHR persistence!
 
 👉 **[Read the Step-by-Step Example Walkthrough](./docs/running-the-example.md)**
 

@@ -12,6 +12,29 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Zero-dependency .env loader (supports comments, quoted values, and whitespace)
+function loadEnvFile(filePath) {
+  if (fs.existsSync(filePath)) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    content.split(/\r?\n/).forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx !== -1) {
+        const key = trimmed.slice(0, eqIdx).trim();
+        const val = trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    });
+  }
+}
+
+// Try loading local .env, then root SDK .env
+loadEnvFile(path.join(__dirname, '.env'));
+loadEnvFile(path.join(__dirname, '../../.env'));
+
 const PORT = process.env.PORT || 3001;
 const CH_BASE_URL = (process.env.CH_BASE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 const CLIENT_ID = process.env.CH_CLIENT_ID || 'partner-emr-dev';
@@ -23,7 +46,7 @@ console.log(`[CoreHealth Proxy] Configured Client ID: ${CLIENT_ID}`);
 const server = http.createServer(async (req, res) => {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
@@ -36,22 +59,30 @@ const server = http.createServer(async (req, res) => {
   const pathname = reqUrl.pathname;
 
   // 1. Static file serving (index.html, dist files)
-  if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+  if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/' || pathname === '/index.html')) {
     const htmlPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(htmlPath)) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(fs.readFileSync(htmlPath));
+      if (req.method === 'HEAD') {
+        res.end();
+      } else {
+        res.end(fs.readFileSync(htmlPath));
+      }
       return;
     }
   }
 
-  if (req.method === 'GET' && pathname.startsWith('/dist/')) {
+  if ((req.method === 'GET' || req.method === 'HEAD') && pathname.startsWith('/dist/')) {
     const distPath = path.join(__dirname, '../../', pathname);
     if (fs.existsSync(distPath)) {
       const ext = path.extname(distPath);
       const mime = ext === '.js' ? 'application/javascript' : 'text/plain';
       res.writeHead(200, { 'Content-Type': mime });
-      res.end(fs.readFileSync(distPath));
+      if (req.method === 'HEAD') {
+        res.end();
+      } else {
+        res.end(fs.readFileSync(distPath));
+      }
       return;
     }
   }
