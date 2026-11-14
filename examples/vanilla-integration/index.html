@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CoreHealth AI Scribe — Reference Vanilla JS Integration</title>
+  <link rel="icon" href="data:,">
   <!-- Load UMD build of the SDK -->
   <script src="/dist/corehealth-scribe-sdk.umd.js"></script>
   <style>
@@ -134,6 +135,32 @@
         <span id="status-dot" class="dot active"></span>
         <strong id="status-label">SDK Initializing...</strong>
         <span id="token-info" style="margin-left: auto; color: var(--text-muted); font-size: 12px;">Acquiring token from proxy...</span>
+      </div>
+
+      <!-- Testing Controls Toolbar -->
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px;">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button type="button" id="demo-load-sample" class="tab-btn" style="background: #ffffff; border: 1px solid #cbd5e1; color: #011b33; padding: 6px 12px; font-size: 12px;" onclick="loadSampleText()">
+            📋 Load Sample Dictation
+          </button>
+          <button type="button" id="demo-process-note" class="tab-btn" style="background: #0284c7; color: #ffffff; padding: 6px 12px; font-size: 12px;" onclick="triggerProcess()">
+            ⚡ Process Dictation & Orders
+          </button>
+          <button type="button" id="demo-clear" class="tab-btn" style="background: #ffffff; border: 1px solid #cbd5e1; color: #dc2626; padding: 6px 10px; font-size: 12px;" onclick="clearScribe()">
+            ✕ Clear
+          </button>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <label style="font-size: 12px; font-weight: 600; color: #475569;">Specialty / Role:</label>
+          <select id="role-select" onchange="changeRole(this.value)" style="font-size: 12px; padding: 4px 8px; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff;">
+            <option value="doctor" selected>Doctor (SOAP, Clerking, POMR)</option>
+            <option value="nurse">Nurse (Focus DAR, SBAR, SOAPIE)</option>
+            <option value="maternity">Maternity (ANC, Labor, PNC)</option>
+          </select>
+          <button type="button" id="demo-fetch-direct" class="tab-btn" style="background: #011b33; color: #ffffff; padding: 6px 12px; font-size: 12px;" onclick="fetchDirectCompositions()">
+            📥 Direct EHR Handoff
+          </button>
+        </div>
       </div>
 
       <!-- Mount point for CoreHealth AI Scribe UI -->
@@ -297,6 +324,106 @@
       resultsCard.style.display = 'block';
       jsonViewer.textContent = JSON.stringify(data, null, 2);
       resultsCard.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    const SAMPLE_DICTATION = 'Patient presents with a 3-day history of high-grade fever, chills, severe headache, and general body weakness. Physical examination reveals: Temperature 38.6°C, BP 124/82 mmHg, Pulse 88 bpm. Chest is clear on auscultation, abdomen is soft and non-tender. Assessment: Acute Uncomplicated Malaria. Prescribe Artemether-Lumefantrine 80/480mg twice daily for 3 days and Paracetamol 500mg TDS for 3 days. Request Urgent Malaria Parasite (MP) Giemsa microscopy and Full Blood Count (FBC). Advise adequate bed rest and oral fluid intake.';
+
+    function loadSampleText() {
+      if (activeTrack === 'web-component') {
+        const el = document.querySelector('corehealth-scribe-studio');
+        if (el && el.shadowRoot) {
+          const area = el.shadowRoot.getElementById('transcript-input');
+          if (area) {
+            area.value = SAMPLE_DICTATION;
+            el.transcript = SAMPLE_DICTATION;
+            el.saveDraft();
+          }
+        }
+      } else {
+        const frame = document.querySelector('#scribe-mount iframe');
+        if (frame && frame.contentWindow) {
+          frame.contentWindow.postMessage({
+            type: 'corehealth:set-transcript',
+            payload: { transcript: SAMPLE_DICTATION }
+          }, '*');
+          const sampleBtn = frame.contentDocument && frame.contentDocument.getElementById('ch-btn-sample');
+          if (sampleBtn) sampleBtn.click();
+        }
+      }
+    }
+
+    function triggerProcess() {
+      if (activeTrack === 'web-component') {
+        const el = document.querySelector('corehealth-scribe-studio');
+        if (el) {
+          el.processDictation();
+        }
+      } else {
+        const frame = document.querySelector('#scribe-mount iframe');
+        if (frame && frame.contentDocument) {
+          const procBtn = frame.contentDocument.getElementById('ch-btn-process');
+          if (procBtn) procBtn.click();
+        }
+      }
+    }
+
+    function clearScribe() {
+      if (activeTrack === 'web-component') {
+        const el = document.querySelector('corehealth-scribe-studio');
+        if (el && el.shadowRoot) {
+          const tInput = el.shadowRoot.getElementById('transcript-input');
+          const nInput = el.shadowRoot.getElementById('note-input');
+          if (tInput) tInput.value = '';
+          if (nInput) nInput.value = '';
+          el.transcript = '';
+          el.structuredSections = [];
+          el.groundedOrders = [];
+          el.renderOrdersTable();
+          el.discardDraft();
+        }
+      } else {
+        const frame = document.querySelector('#scribe-mount iframe');
+        if (frame && frame.contentDocument) {
+          const clrBtn = frame.contentDocument.getElementById('ch-btn-clear');
+          if (clrBtn) clrBtn.click();
+        }
+      }
+    }
+
+    let currentRole = 'doctor';
+    function changeRole(newRole) {
+      currentRole = newRole;
+      const tax = newRole === 'nurse' ? 'dar' : (newRole === 'maternity' ? 'anc' : 'soap');
+      if (activeTrack === 'web-component') {
+        const el = document.querySelector('corehealth-scribe-studio');
+        if (el) {
+          el.setAttribute('role', newRole);
+          el.setAttribute('taxonomy', tax);
+        }
+      } else {
+        mountScribe('iframe');
+      }
+    }
+
+    async function fetchDirectCompositions() {
+      const statusLabel = document.getElementById('status-label');
+      statusLabel.textContent = 'Calling CoreHealth Direct openEHR & FHIR Compositions Handoff...';
+      try {
+        const res = await fetch(`/api/sdk/scribe/session/${currentToken}/compositions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`
+          },
+          body: JSON.stringify({ cross_border: false })
+        });
+        const data = await res.json();
+        statusLabel.textContent = '✓ Received direct compositions handoff!';
+        showResults(data);
+      } catch (err) {
+        statusLabel.textContent = `Direct Compositions Error: ${err.message}`;
+        console.error(err);
+      }
     }
 
     // Start on page load

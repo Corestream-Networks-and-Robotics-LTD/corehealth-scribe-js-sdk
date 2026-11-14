@@ -155,8 +155,8 @@ var CoreHealthScribeElement = class CoreHealthScribeElement extends HTMLElement 
     super();
     this.attachShadow({ mode: 'open' });
 
-    // State
-    this.role = 'doctor';
+    // State (Store role as internal property to prevent ARIA attribute reflection in constructor)
+    this._clinicalRole = 'doctor';
     this.taxonomy = 'soap';
     this.isRecording = false;
     this.recognition = null;
@@ -173,6 +173,14 @@ var CoreHealthScribeElement = class CoreHealthScribeElement extends HTMLElement 
     this.customCatalog = null;
     this.debounceTimer = null;
     this.showCatalogModal = false;
+  }
+
+  get role() {
+    return this._clinicalRole || this.getAttribute('role') || 'doctor';
+  }
+
+  set role(val) {
+    this._clinicalRole = val || 'doctor';
   }
 
   static get observedAttributes() {
@@ -564,7 +572,11 @@ var CoreHealthScribeElement = class CoreHealthScribeElement extends HTMLElement 
         <div class="ch-pane">
           <div class="ch-pane-header">
             <span>1. Audio Dictation & Live Transcript</span>
-            <button type="button" id="btn-record" class="ch-btn ch-btn-record">Start Dictation</button>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button type="button" id="btn-sample" class="ch-btn ch-btn-secondary" title="Load sample consultation dictation">Load Sample</button>
+              <button type="button" id="btn-process" class="ch-btn" style="background: #0284c7; color: #ffffff; padding: 6px 12px; font-size: 12px;">Process Note</button>
+              <button type="button" id="btn-record" class="ch-btn ch-btn-record">Start Dictation</button>
+            </div>
           </div>
           <canvas id="waveform-canvas" class="ch-waveform"></canvas>
           <textarea id="transcript-input" class="ch-textarea" placeholder="Dictate your clinical findings, history, examination, or prescriptions..."></textarea>
@@ -574,7 +586,10 @@ var CoreHealthScribeElement = class CoreHealthScribeElement extends HTMLElement 
         <div class="ch-pane">
           <div class="ch-pane-header">
             <span id="note-pane-title">2. Structured Note (${this.taxonomy.toUpperCase()})</span>
-            <span style="font-weight: normal; color: #94a3b8; font-size: 10px;">Lossless Conversion Ready</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button type="button" id="btn-copy-note" class="ch-btn ch-btn-secondary" style="font-size: 11px; padding: 4px 8px;">Copy Note</button>
+              <button type="button" id="btn-clear-all" class="ch-btn ch-btn-secondary" style="font-size: 11px; padding: 4px 8px; color: #dc2626;">Clear</button>
+            </div>
           </div>
           <textarea id="note-input" class="ch-textarea" placeholder="AI structured note will appear here in selected taxonomy format..."></textarea>
         </div>
@@ -600,7 +615,7 @@ var CoreHealthScribeElement = class CoreHealthScribeElement extends HTMLElement 
         <table class="ch-orders-table">
           <thead>
             <tr>
-              <th style="width: 30px;">[x]</th>
+              <th style="width: 30px;"><input type="checkbox" id="ch-select-all-orders" checked title="Select/Deselect All"></th>
               <th style="width: 110px;">Category</th>
               <th>Item Name & Details</th>
               <th>Dosage / Indication</th>
@@ -705,15 +720,81 @@ var CoreHealthScribeElement = class CoreHealthScribeElement extends HTMLElement 
 
   bindEvents() {
     const recordBtn = this.shadowRoot.getElementById('btn-record');
+    const processBtn = this.shadowRoot.getElementById('btn-process');
+    const sampleBtn = this.shadowRoot.getElementById('btn-sample');
+    const copyNoteBtn = this.shadowRoot.getElementById('btn-copy-note');
+    const clearAllBtn = this.shadowRoot.getElementById('btn-clear-all');
     const signBtn = this.shadowRoot.getElementById('btn-sign');
     const langSelect = this.shadowRoot.getElementById('lang-select');
     const addOrderBtn = this.shadowRoot.getElementById('btn-add-order');
     const discardDraftBtn = this.shadowRoot.getElementById('btn-discard-draft');
     const transcriptInput = this.shadowRoot.getElementById('transcript-input');
     const noteInput = this.shadowRoot.getElementById('note-input');
+    const selectAllCheckbox = this.shadowRoot.getElementById('ch-select-all-orders');
 
     if (recordBtn) {
       recordBtn.addEventListener('click', () => this.toggleRecording());
+    }
+
+    if (processBtn) {
+      processBtn.addEventListener('click', () => {
+        const statusBadge = this.shadowRoot.getElementById('status-badge');
+        if (statusBadge) {
+          statusBadge.innerText = 'Structuring note & orders...';
+          statusBadge.className = 'ch-badge';
+        }
+        this.processDictation();
+      });
+    }
+
+    if (sampleBtn) {
+      sampleBtn.addEventListener('click', () => {
+        if (transcriptInput) {
+          transcriptInput.value = 'Patient presents with a 3-day history of high-grade fever, chills, severe headache, and general body weakness. Physical examination reveals: Temperature 38.6°C, BP 124/82 mmHg, Pulse 88 bpm. Chest is clear on auscultation, abdomen is soft and non-tender. Assessment: Acute Uncomplicated Malaria. Prescribe Artemether-Lumefantrine 80/480mg twice daily for 3 days and Paracetamol 500mg TDS for 3 days. Request Urgent Malaria Parasite (MP) Giemsa microscopy and Full Blood Count (FBC). Advise adequate bed rest and oral fluid intake.';
+          this.transcript = transcriptInput.value;
+          this.saveDraft();
+        }
+      });
+    }
+
+    if (copyNoteBtn) {
+      copyNoteBtn.addEventListener('click', async () => {
+        if (noteInput && noteInput.value) {
+          try {
+            await navigator.clipboard.writeText(noteInput.value);
+            const origText = copyNoteBtn.innerText;
+            copyNoteBtn.innerText = 'Copied!';
+            setTimeout(() => { copyNoteBtn.innerText = origText; }, 1500);
+          } catch (e) {
+            console.warn('Clipboard write error', e);
+          }
+        }
+      });
+    }
+
+    if (clearAllBtn) {
+      clearAllBtn.addEventListener('click', () => {
+        if (confirm('Clear current transcript and clinical orders?')) {
+          if (transcriptInput) transcriptInput.value = '';
+          if (noteInput) noteInput.value = '';
+          this.transcript = '';
+          this.structuredSections = [];
+          this.groundedOrders = [];
+          this.renderOrdersTable();
+          if (signBtn) signBtn.disabled = true;
+          this.discardDraft();
+        }
+      });
+    }
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        this.groundedOrders.forEach(ord => { ord.selected = checked; });
+        this.shadowRoot.querySelectorAll('.ch-order-checkbox').forEach(cb => { cb.checked = checked; });
+        this.updateTariffPreview();
+        this.dispatchEvent(new CustomEvent('corehealth:orders-updated', { detail: this.groundedOrders }));
+      });
     }
 
     if (signBtn) {
