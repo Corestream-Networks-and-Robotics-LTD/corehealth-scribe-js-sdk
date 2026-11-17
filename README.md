@@ -64,16 +64,78 @@ Open `http://localhost:3001` in your browser to test dictation, structuring with
 
 ---
 
+## How to Test AI Scribe & Interoperability APIs
+
+This SDK repository contains everything needed to thoroughly test both the AI Scribe Studio and the full suite of health data interoperability APIs.
+
+### 1. Testing AI Scribe (Frontend UI + Backend Proxy)
+
+- **Interactive In-Browser Testing (`http://localhost:3001`)**:
+  ```bash
+  cd examples/vanilla-integration
+  cp .env.example .env
+  npm install
+  node server.js
+  ```
+  Open `http://localhost:3001` in your browser. Dictate or click **Load Sample**, click **Process Note**, and click **Accept & Sign** to see the full clinical note and dual-standard payloads.
+- **Automated Proxy Integration Test**:
+  ```bash
+  cd examples/vanilla-integration
+  node test.js
+  ```
+  Validates ephemeral session token minting (`SKT_...`) and encounter sign-off with openEHR and FHIR bundle persistence.
+
+### 2. Testing Interoperability APIs (FHIR R4, openEHR & NDPA)
+
+- **Ready-to-Run Postman Collection**:
+  Import [`postman/CoreHealth-Interop-Collection.json`](./postman/CoreHealth-Interop-Collection.json) into Postman. It contains 25+ pre-configured requests with automated test assertions and token auto-population across:
+  - `00. Authentication` (Sanctum PAT acquire & token verify)
+  - `01. NDPA 2023 Statutory Privacy` (Treatment & Cloud AI consents)
+  - `02. HL7 FHIR R4` (CapabilityStatement, Patient, Observation with LOINC, MedicationRequest with WHO ATC, ServiceRequest)
+  - `03. openEHR ITS-REST` (EHR create, read, and AQL archetype queries)
+  - `04. OpenEMR REST Compatibility` (Patient list and C-CDA XML export)
+  - `05. AI Scribe SDK` (Full lifecycle: token issue, CSCP compression, dictation, taxonomy conversion, sign-off, compositions, and revocation)
+- **OpenAPI 3.0 Contract Testing**:
+  Import [`openapi/corehealth-interop-openapi.json`](./openapi/corehealth-interop-openapi.json) into Swagger Editor, Postman, Insomnia, or your API testing framework.
+- **Step-by-Step Clinical API Guide**:
+  Read [`docs/full-interoperability-guide.md`](./docs/full-interoperability-guide.md) for concrete HTTP requests, LOINC/ATC code bindings, and AQL queries.
+
+---
+
 ## Installation
 
-### Via npm
+### Option A — Package Manager via Git (npm / yarn / pnpm)
+
+Install the SDK package directly from the Git repository:
+
 ```bash
-npm install @corehealth/scribe-sdk
+# Direct install via Git URL
+npm install git+https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git
+
+# Or pin to a specific branch or release tag:
+npm install git+https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git#main
 ```
 
-### Via CDN (Vanilla JS / Blade / PHP / Django)
+In your project's `package.json`:
+```json
+{
+  "dependencies": {
+    "@corehealth/scribe-sdk": "git+https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git#main"
+  }
+}
+```
+
+### Option B — CDN / Direct `<script>` Tag (Vanilla HTML / PHP / Blade / Django)
+
+Zero build step or package manager needed:
 ```html
 <script src="https://corehealth.corestream.ng/js/corehealth-scribe-sdk.umd.js"></script>
+```
+
+### Option C — Git Submodule (Vendor Tree)
+
+```bash
+git submodule add https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git vendor/corehealth-scribe-sdk
 ```
 
 ---

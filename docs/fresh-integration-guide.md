@@ -6,9 +6,23 @@ Follow these 4 steps to embed CoreHealth AI Scribe into any web application or e
 
 ## Step 1: Install the SDK
 
-### Option A: npm (React, Vue, Angular, Svelte, Vite, Webpack)
+### Option A: Direct Git Installation (npm / yarn / pnpm)
+Install the package directly from the Git repository:
 ```bash
-npm install @corehealth/scribe-sdk
+# npm
+npm install git+https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git
+
+# Or pin to main branch:
+npm install git+https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git#main
+```
+
+Or add to your `package.json`:
+```json
+{
+  "dependencies": {
+    "@corehealth/scribe-sdk": "git+https://github.com/Corestream-Networks-and-Robotics-LTD/corehealth-scribe-js-sdk.git#main"
+  }
+}
 ```
 
 ### Option B: CDN / Direct `<script>` Tag (Vanilla HTML / PHP / Blade / Django Templates)

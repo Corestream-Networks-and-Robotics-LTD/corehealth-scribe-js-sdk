@@ -22,18 +22,16 @@ cd examples/vanilla-integration
 
 ## Step 2: Configure Environment
 
-Copy `.env.example` to `.env` (optional — sensible defaults are already set):
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
 
-Default configuration:
+Default configuration (partner client credentials are administered in **CoreHealth Admin &rarr; Hospital Configuration &rarr; AI Scribe & SDK** at `/hospital-config#sdk-settings`):
 - `PORT=3001`
 - `CH_BASE_URL=http://127.0.0.1:8000` (CoreHealth edge or cloud node)
-- `CH_CLIENT_ID=partner-emr-dev`
-- `CH_CLIENT_SECRET=partner_dev_secret_2026`
-
-> **Note:** If CoreHealth is not running locally, the proxy automatically falls back to offline mock mode so you can test the UI lifecycle immediately!
+- `CH_CLIENT_ID=your_client_id_here`
+- `CH_CLIENT_SECRET=your_client_secret_here`
 
 ---
 
