@@ -1,6 +1,6 @@
 {
   "name": "@corehealth/scribe-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Corehealth by CorestreamNG — AI Scribe Embeddable SDK — Multi-Standard (openEHR & FHIR R4) Clinical Dictation SDK",
   "main": "dist/corehealth-scribe-sdk.umd.js",
   "module": "dist/corehealth-scribe-sdk.esm.js",
